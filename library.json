@@ -22,6 +22,7 @@
   "frameworks": "arduino",
   "platforms": "teensy",
   "build": {
+    "libLDFMode": "deep+",
     "flags": [
         "-DSQLITE_OS_OTHER=1",
         "-DSQLITE_THREADSAFE=0",
