@@ -15,7 +15,7 @@
       "email": "sam.halvoe@outlook.de"
     }
   ],
-  "license": "Public Domain",
+  "license": "MIT",
   "dependencies": {
   },
   "frameworks": "arduino",
