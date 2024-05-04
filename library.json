@@ -1,0 +1,23 @@
+{
+  "name": "teensy41SQLite",
+  "version": "0.0.1",
+  "description": "arduino teensy 4.1 sqlite vfs",
+  "keywords": "teensy, sqlite",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/SamHalvoe/teensy41SQLite.git"
+  },
+  "authors":
+  [
+    {
+      "name": "Sam Halvoe",
+      "email": "sam.halvoe@outlook.de"
+    }
+  ],
+  "license": "Public Domain",
+  "dependencies": {
+  },
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}
