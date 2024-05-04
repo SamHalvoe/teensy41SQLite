@@ -690,3 +690,27 @@ sqlite3_vfs *sqlite3_demovfs(void){
   };
   return &demovfs;
 }
+
+void errorLogCallback(void *pArg, int iErrCode, const char *zMsg)
+{
+  //Serial.printf("(%d) %s\n", iErrCode, zMsg);
+}
+
+int sqlite3_os_init(void)
+{
+  int returnCode = SQLITE_OK;
+  
+  //returnCode = sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, NULL);
+  //if (returnCode != SQLITE_OK) { return returnCode; }
+  returnCode = sqlite3_vfs_register(sqlite3_demovfs(), 1);
+  if (returnCode != SQLITE_OK) { return returnCode; }
+
+  return SQLITE_OK;
+}
+
+int sqlite3_os_end(void)
+{
+  // undo what sqlite3_os_init did (e.g. free resources)
+
+  return SQLITE_OK;
+}

@@ -1,20 +1,13 @@
-#pragma once
+#ifndef TEENSY_41_SQLITE
+#define TEENSY_41_SQLITE
 
 #include "sqlite3.h"
 
 #include <SdFat.h>
 
-sqlite3_vfs *sqlite3_demovfs();
-SdFat* vfsFilesystem;
+extern SdFat* vfsFilesystem;
 
-int setupSQLite(SdFat* io_filesystem)
-{
-  if (not io_filesystem)
-  {
-    return SQLITE_ERROR;
-  }
+int beginSQLite(SdFat* io_filesystem);
+int endSQLite();
 
-  vfsFilesystem = io_filesystem;
-
-  return sqlite3_vfs_register(sqlite3_demovfs(), 1);
-}
+#endif // TEENSY_41_SQLITE

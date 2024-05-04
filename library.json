@@ -1,6 +1,6 @@
 {
   "name": "teensy41SQLite",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "arduino teensy 4.1 sqlite vfs",
   "keywords": "teensy, sqlite",
   "repository":
@@ -23,6 +23,9 @@
   "platforms": "teensy",
   "build": {
     "libLDFMode": "deep+",
+    "build_scr_filter": [
+        "-<**/main.cpp>"
+    ],
     "flags": [
         "-DSQLITE_OS_OTHER=1",
         "-DSQLITE_THREADSAFE=0",
