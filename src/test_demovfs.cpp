@@ -389,8 +389,6 @@ static int demoFileControl(sqlite3_file *pFile, int op, void *pArg){
   return SQLITE_NOTFOUND;
 }
 
-SdFat sd;
-
 /*
 ** The xSectorSize() and xDeviceCharacteristics() methods. These two
 ** may return special values allowing SQLite to optimize file-system 
