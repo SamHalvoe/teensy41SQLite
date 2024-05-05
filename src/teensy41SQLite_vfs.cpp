@@ -166,6 +166,11 @@ static int demoDirectWrite(
 ){
   size_t nWrite;                  /* Return value from write() */
   
+  if (iAmt < 0) // is a size type, must not be less than zero
+  {
+    return SQLITE_INTERNAL;
+  }
+
   if (not p->fd->seek(iOfst))
   {
     return SQLITE_IOERR_WRITE;
@@ -173,7 +178,7 @@ static int demoDirectWrite(
 
   nWrite = p->fd->write(zBuf, iAmt);
 
-  if (nWrite != iAmt)
+  if (nWrite != static_cast<size_t>(iAmt))
   {
     return SQLITE_IOERR_WRITE;
   }
