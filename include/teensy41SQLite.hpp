@@ -3,8 +3,6 @@
 
 #include "sqlite3.h"
 
-#include <SdFat.h>
-
 int beginSQLite();
 int endSQLite();
 

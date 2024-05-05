@@ -121,10 +121,11 @@
 
 #include "teensy41SQLite.hpp"
 
+#include <SdFat.h>
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 
-using File = FsFile; // define File class, which actually interfaces with the storage hardware (e.g. a sd card)
+using FileVFS = FsBaseFile; // define FileVFS class, which actually interfaces with the storage hardware (e.g. a sd card)
 #define FS_VFS_NAME "aty41_vfs" // arduino teensy 4.1 vfs
 
 /*
@@ -146,7 +147,7 @@ using File = FsFile; // define File class, which actually interfaces with the st
 typedef struct DemoFile DemoFile;
 struct DemoFile {
   sqlite3_file base;              /* Base class. Must be first. */
-  File* fd;                      /* File descriptor */
+  FileVFS* fd;                    /* File descriptor */
 
   char *aBuffer;                  /* Pointer to malloc'd buffer */
   int nBuffer;                    /* Valid bytes of data in zBuffer */
@@ -458,7 +459,7 @@ static int demoOpen(
   if( flags&SQLITE_OPEN_READWRITE ) oflags |= O_RDWR;
 
   memset(p, 0, sizeof(DemoFile));
-  p->fd = new File();
+  p->fd = new FileVFS();
 
   if (not p->fd)
   {
@@ -490,7 +491,7 @@ static int demoOpen(
 ** file has been synced to disk before returning.
 */
 static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
-  File file;
+  FileVFS file;
 
   if (not file.remove(zPath))
   {
@@ -501,7 +502,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
   {
     String dirPath(zPath);
     dirPath = dirPath.substring(0, dirPath.lastIndexOf('/'));
-    File dir;
+    FileVFS dir;
 
     if (not dir.open(dirPath.c_str(), O_RDONLY))
     {
@@ -545,7 +546,7 @@ static int demoAccess(
        || flags==SQLITE_ACCESS_READWRITE
   );
 
-  File file;
+  FileVFS file;
   
   if (file.exists(zPath))
   {
