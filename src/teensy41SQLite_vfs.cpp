@@ -171,7 +171,7 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
-  if (not p->fd->seek(iOfst))
+  if (not p->fd->seekSet(iOfst))
   {
     return SQLITE_IOERR_WRITE;
   }
@@ -245,7 +245,7 @@ static int demoRead(
     return rc;
   }
 
-  if (not p->fd->seek(iOfst))
+  if (not p->fd->seekSet(iOfst))
   {
     return SQLITE_INTERNAL;//SQLITE_IOERR_READ;
   }
