@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <SdFat.h>
 
 #include "teensy41SQLite.hpp"
 
