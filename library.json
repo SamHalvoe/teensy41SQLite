@@ -36,7 +36,6 @@
         "-DSQLITE_OMIT_PROGRESS_CALLBACK=1",
         "-DSQLITE_OMIT_AUTOINIT=1",
         "-DSQLITE_STRICT_SUBTYPE=1"
-    ],
-    "extraScript": "linkerOptions.py"
+    ]
   }
 }
