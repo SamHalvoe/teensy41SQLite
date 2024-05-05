@@ -168,7 +168,7 @@ static int demoDirectWrite(
   
   if (iAmt < 0) // is a size type, must not be less than zero
   {
-    return SQLITE_INTERNAL;
+    return SQLITE_IOERR_WRITE;
   }
 
   if (not p->fd->seek(iOfst))
@@ -239,6 +239,7 @@ static int demoRead(
   ** a journal file when there is data cached in the write-buffer.
   */
   rc = demoFlushBuffer(p);
+
   if (rc != SQLITE_OK)
   {
     return rc;
@@ -246,7 +247,7 @@ static int demoRead(
 
   if (not p->fd->seek(iOfst))
   {
-    return SQLITE_IOERR_READ;
+    return SQLITE_INTERNAL;//SQLITE_IOERR_READ;
   }
 
   nRead = p->fd->read(zBuf, iAmt);
@@ -265,7 +266,7 @@ static int demoRead(
     return SQLITE_IOERR_SHORT_READ;
   }
 
-  return SQLITE_IOERR_READ;
+  return SQLITE_IOERR_READ; // nRead < 0 --> call to p->fd->read(zBuf, iAmt) failed
 }
 
 /*
