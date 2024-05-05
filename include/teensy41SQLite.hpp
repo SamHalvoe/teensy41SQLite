@@ -5,9 +5,7 @@
 
 #include <SdFat.h>
 
-extern SdFat* vfsFilesystem; // definition is located at the start of teensy41SQLite.cpp
-
-int beginSQLite(SdFat* io_filesystem);
+int beginSQLite();
 int endSQLite();
 
 #endif // TEENSY_41_SQLITE

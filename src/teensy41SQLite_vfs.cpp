@@ -202,7 +202,14 @@ static int demoClose(sqlite3_file *pFile){
   DemoFile *p = (DemoFile*)pFile;
   rc = demoFlushBuffer(p);
   sqlite3_free(p->aBuffer);
-  p->fd->close();
+  
+  if (not p->fd->close() && rc == SQLITE_OK)
+  {
+    rc = SQLITE_IOERR_CLOSE;
+  }
+
+  delete p->fd;
+
   return rc;
 }
 
@@ -451,8 +458,15 @@ static int demoOpen(
   if( flags&SQLITE_OPEN_READWRITE ) oflags |= O_RDWR;
 
   memset(p, 0, sizeof(DemoFile));
-  p->fd = new File(vfsFilesystem->open(zName, oflags));
-  if (not p->fd || not *(p->fd))
+  p->fd = new File();
+
+  if (not p->fd)
+  {
+    sqlite3_free(aBuf);
+    return SQLITE_ERROR;
+  }
+
+  if (not p->fd->open(zName, oflags))
   {
     sqlite3_free(aBuf);
     return SQLITE_CANTOPEN;
@@ -476,7 +490,9 @@ static int demoOpen(
 ** file has been synced to disk before returning.
 */
 static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
-  if (not vfsFilesystem->remove(zPath))
+  File file;
+
+  if (not file.remove(zPath))
   {
     return SQLITE_IOERR_DELETE;
   }
@@ -485,9 +501,9 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
   {
     String dirPath(zPath);
     dirPath = dirPath.substring(0, dirPath.lastIndexOf('/'));
-    File dir = vfsFilesystem->open(dirPath, O_RDONLY);
+    File dir;
 
-    if (not dir)
+    if (not dir.open(dirPath.c_str(), O_RDONLY))
     {
       return SQLITE_IOERR_DIR_FSYNC;
     }
@@ -511,16 +527,6 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
   return SQLITE_OK;
 }
 
-#ifndef F_OK
-# define F_OK 0
-#endif
-#ifndef R_OK
-# define R_OK 4
-#endif
-#ifndef W_OK
-# define W_OK 2
-#endif
-
 const int ACCESS_FAILED = 0;
 const int ACCESS_SUCCESFUL = 1;
 
@@ -538,8 +544,10 @@ static int demoAccess(
        || flags==SQLITE_ACCESS_READ
        || flags==SQLITE_ACCESS_READWRITE
   );
+
+  File file;
   
-  if (vfsFilesystem->exists(zPath))
+  if (file.exists(zPath))
   {
     if (flags == SQLITE_ACCESS_EXISTS)
     {
@@ -548,7 +556,7 @@ static int demoAccess(
     }
     else if (flags == SQLITE_ACCESS_READ)
     {
-      File file = vfsFilesystem->open(zPath, O_RDONLY);
+      file.open(zPath, O_RDONLY);
 
       if (file && file.isReadable())
       {
@@ -558,7 +566,7 @@ static int demoAccess(
     }
     else if (flags == SQLITE_ACCESS_READWRITE)
     {
-      File file = vfsFilesystem->open(zPath, O_RDWR);
+      file.open(zPath, O_RDWR);
 
       if (file && file.isReadable() && file.isWritable())
       {
