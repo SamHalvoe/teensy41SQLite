@@ -245,6 +245,9 @@ static int demoRead(
     return rc;
   }
 
+  Serial.print("VFS_DEBUG: ");
+  Serial.println(iOfst);
+
   if (not p->fd->seekSet(iOfst))
   {
     return SQLITE_INTERNAL;//SQLITE_IOERR_READ;
