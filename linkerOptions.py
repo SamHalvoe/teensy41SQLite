@@ -1,5 +1,8 @@
 Import("env")
 
+# Dump build environment (for debug)
+print(env.Dump())
+
 # Replace original teensy41 linker script with our "sqlite3" linker script
 linkflags = env.get("LINKFLAGS")
 linkflags.remove("-T")
