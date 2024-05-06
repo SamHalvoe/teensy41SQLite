@@ -7,7 +7,8 @@
 	"settings": {
 		"files.associations": {
 			"streambuf": "cpp",
-			"typeinfo": "cpp"
+			"typeinfo": "cpp",
+			"cmath": "cpp"
 		}
 	}
 }

@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <SdFat.h>
 
 #include "teensy41SQLite.hpp"
 
@@ -8,7 +7,8 @@ SdFat sd;
 void setup()
 {
   sd.begin(SdioConfig(FIFO_SDIO));
-  beginSQLite();
+  T41SQLite::getInstance().setSectorSizeAuto(sd);
+  T41SQLite::getInstance().begin();
 }
 
 void loop()

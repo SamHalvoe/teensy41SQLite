@@ -121,12 +121,11 @@
 
 #include "teensy41SQLite.hpp"
 
-#include <SdFat.h>
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 
 using FileVFS = FsBaseFile; // define FileVFS class, which actually interfaces with the storage hardware (e.g. a sd card)
-#define FS_VFS_NAME "aty41_vfs" // arduino teensy 4.1 vfs
+#define FS_VFS_NAME "t41_vfs" // teensy 4.1 vfs
 
 /*
 ** Size of the write buffer used by journal files in bytes.
@@ -179,6 +178,11 @@ static int demoDirectWrite(
   nWrite = p->fd->write(zBuf, iAmt);
 
   if (nWrite != static_cast<size_t>(iAmt))
+  {
+    return SQLITE_IOERR_WRITE;
+  }
+
+  if (not p->fd->sync())
   {
     return SQLITE_IOERR_WRITE;
   }
@@ -283,30 +287,37 @@ static int demoWrite(
 ){
   DemoFile *p = (DemoFile*)pFile;
   
-  if( p->aBuffer ){
+  if (p->aBuffer)
+  {
     char *z = (char *)zBuf;       /* Pointer to remaining data to write */
     int n = iAmt;                 /* Number of bytes at z */
     sqlite3_int64 i = iOfst;      /* File offset to write to */
 
-    while( n>0 ){
+    while (n > 0)
+    {
       int nCopy;                  /* Number of bytes to copy into buffer */
 
       /* If the buffer is full, or if this data is not being written directly
       ** following the data already buffered, flush the buffer. Flushing
       ** the buffer is a no-op if it is empty.  
       */
-      if( p->nBuffer==SQLITE_DEMOVFS_BUFFERSZ || p->iBufferOfst+p->nBuffer!=i ){
+      if (p->nBuffer == SQLITE_DEMOVFS_BUFFERSZ ||
+          p->iBufferOfst + p->nBuffer != i)
+      {
         int rc = demoFlushBuffer(p);
-        if( rc!=SQLITE_OK ){
+        if (rc != SQLITE_OK)
+        {
           return rc;
         }
       }
-      assert( p->nBuffer==0 || p->iBufferOfst+p->nBuffer==i );
+
+      assert(p->nBuffer == 0 || p->iBufferOfst + p->nBuffer == i);
       p->iBufferOfst = i - p->nBuffer;
 
       /* Copy as much data as possible into the buffer. */
       nCopy = SQLITE_DEMOVFS_BUFFERSZ - p->nBuffer;
-      if( nCopy>n ){
+      if (nCopy > n)
+      {
         nCopy = n;
       }
       memcpy(&p->aBuffer[p->nBuffer], z, nCopy);
@@ -316,7 +327,9 @@ static int demoWrite(
       i += nCopy;
       z += nCopy;
     }
-  }else{
+  }
+  else
+  {
     return demoDirectWrite(p, zBuf, iAmt, iOfst);
   }
 
@@ -413,12 +426,12 @@ static int demoFileControl(sqlite3_file *pFile, int op, void *pArg){
 */
 static int demoSectorSize(sqlite3_file *pFile)
 {
-  return 0;
+  return T41SQLite::getInstance().getSectorSize();
 }
 
 static int demoDeviceCharacteristics(sqlite3_file *pFile)
 {
-  return 0;
+  return T41SQLite::getInstance().getDeviceCharacteristics();
 }
 
 /*
