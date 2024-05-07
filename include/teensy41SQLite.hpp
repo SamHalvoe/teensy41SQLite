@@ -15,6 +15,9 @@ class T41SQLite
     T41SQLite() = default;
     ~T41SQLite() = default;
 
+    int calculateSectorSizeInBytes(unsigned char in_lowBitsSectorSizeAsExponentForPowerOfTwo,
+                                   unsigned char in_highBitsSectorSizeAsExponentForPowerOfTwo) const;
+
   public:
     T41SQLite(const T41SQLite&) = delete;
     T41SQLite& operator=(const T41SQLite&) = delete;
