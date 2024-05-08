@@ -37,6 +37,7 @@ class T41SQLite
     bool setSectorSizeAuto(SdFat& in_sdFat);
     int getSectorSize() const;
 
+    bool assumeSingleSectorWriteIsAtomic();
     void resetDeviceCharacteristics();
     void setDeviceCharacteristics(int in_ioCap);
     int getDeviceCharacteristics() const;

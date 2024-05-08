@@ -67,6 +67,53 @@ int T41SQLite::getSectorSize() const
   return m_sectorSize;
 }
 
+/*
+This methods overwrites the values set with setDeviceCharacteristics!
+It returns true if a valid sector is given. Otherwise it retruns false.
+*/
+bool T41SQLite::assumeSingleSectorWriteIsAtomic()
+{
+  switch (m_sectorSize)
+  {
+    case 512 * 1:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC512;
+    break;
+
+    case 512 * 2:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC1K;
+    break;
+
+    case 512 * 4:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC2K;
+    break;
+
+    case 512 * 8:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC4K;
+    break;
+
+    case 512 * 16:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC8K;
+    break;
+
+    case 512 * 32:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC16K;
+    break;
+
+    case 512 * 64:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC32K;
+    break;
+
+    case 512 * 128:
+      m_deviceCharacteristics = SQLITE_IOCAP_ATOMIC64K;
+    break;
+
+    default:
+      return false;
+  }
+
+  return true;
+}
+
 void T41SQLite::resetDeviceCharacteristics()
 {
   m_deviceCharacteristics = 0;
