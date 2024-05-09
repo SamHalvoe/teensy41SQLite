@@ -124,7 +124,7 @@
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 
-using FileVFS = FsBaseFile; // define FileVFS class, which actually interfaces with the storage hardware (e.g. a sd card)
+using FileVFS = File; // define FileVFS class, which actually interfaces with the storage hardware (e.g. a sd card)
 #define FS_VFS_NAME "t41_vfs" // teensy 4.1 vfs
 
 /*
@@ -172,7 +172,7 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
-  if (not p->fd->seekSet(iOfst))
+  if (not p->fd->seek(iOfst, SeekSet))
   {
     return SQLITE_IOERR_WRITE;
   }
@@ -184,10 +184,7 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
-  if (not p->fd->sync())
-  {
-    return SQLITE_IOERR_WRITE;
-  }
+  p->fd->flush();
 
   Serial.print("VFS_DEBUG_DIRECT_WRITE_SIZE: ");
   Serial.println(p->fd->size());
@@ -224,16 +221,9 @@ static int demoClose(sqlite3_file *pFile){
 
   Serial.println("VFS_DEBUG_CLOSE");
   Serial.print("VFS_DEBUG_CLOSE_FILE ");
-  char fileName[16];
-  p->fd->getName(fileName, 16);
-  Serial.println(fileName);
-  
-  if (not p->fd->close() && rc == SQLITE_OK)
-  {
-    rc = SQLITE_IOERR_CLOSE;
-  }
+  Serial.println(p->fd->name());
 
-  delete p->fd;
+  p->fd->close();
 
   return rc;
 }
@@ -274,16 +264,17 @@ static int demoRead(
   Serial.print("VFS_DEBUG_READ_FILE_SIZE ");
   Serial.println(p->fd->size());
   Serial.print("VFS_DEBUG_READ_CUR ");
-  Serial.println(p->fd->curPosition());
+  Serial.println(p->fd->position());
 
-  if (not p->fd->seekSet(min(iOfst, static_cast<sqlite_int64>(p->fd->size()))))
+  uint64_t seekPosition = min(static_cast<uint64_t>(iOfst), p->fd->size());
+  if (not p->fd->seek(seekPosition, SeekSet))
   {
     Serial.println("VFS_DEBUG_READ_SEEK_FAIL");
     return SQLITE_IOERR_READ;
   }
 
   Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
-  Serial.println(p->fd->curPosition());
+  Serial.println(p->fd->position());
 
   nRead = p->fd->read(zBuf, iAmt);
   Serial.print("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
@@ -399,14 +390,9 @@ static int demoSync(sqlite3_file *pFile, int flags){
     return rc;
   }
   
-  if (p->fd->sync())
-  {
-    return SQLITE_OK;
-  }
-  else
-  {
-    return SQLITE_IOERR_FSYNC;
-  }
+  p->fd->flush();
+
+  return SQLITE_OK;
 }
 
 /*
@@ -521,21 +507,22 @@ static int demoOpen(
     }
   }
 
-  if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= O_EXCL;
+  /*if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= O_EXCL;
   if (flags & SQLITE_OPEN_CREATE)    oflags |= O_CREAT;
   if (flags & SQLITE_OPEN_READONLY)  oflags |= O_RDONLY;
-  if (flags & SQLITE_OPEN_READWRITE) oflags |= O_RDWR;
+  if (flags & SQLITE_OPEN_READWRITE) oflags |= O_RDWR;*/
+  
+  uint8_t openMode = FILE_READ;
 
-  memset(p, 0, sizeof(DemoFile));
-  p->fd = new FileVFS();
-
-  if (not p->fd)
+  if (not (flags & SQLITE_OPEN_READONLY))
   {
-    sqlite3_free(aBuf);
-    return SQLITE_ERROR;
+    openMode = FILE_WRITE;
   }
 
-  if (not p->fd->open(zName, oflags))
+  memset(p, 0, sizeof(DemoFile));
+  p->fd = new FileVFS(T41SQLite::getInstance().getFilesystem()->open(zName, openMode));
+  
+  if (not p->fd) // check if file is open
   {
     sqlite3_free(aBuf);
     return SQLITE_CANTOPEN;
@@ -555,52 +542,22 @@ static int demoOpen(
 
 /*
 ** Delete the file identified by argument zPath. If the dirSync parameter
-** is non-zero, then ensure the file-system modification to delete the
+** is non-zero, then WE SHOULD ensure the file-system modification to delete the
 ** file has been synced to disk before returning.
+** BUT CANNOT ensure the sync, therefore we ignore the dirSync parameter.
 */
 static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
 {
   Serial.print("VFS_DEBUG_DELETE_PATH ");
   Serial.println(zPath);
-  
-  String dirPath(zPath);
-  dirPath = dirPath.substring(0, dirPath.lastIndexOf('/') + 1);
-  FileVFS dir;
 
-  Serial.print("VFS_DEBUG_DELETE_DIR_PATH ");
-  Serial.println(dirPath);
-
-  if (not dir.open(dirPath.c_str(), O_RDONLY))
+  if (not T41SQLite::getInstance().getFilesystem()->remove(zPath))
   {
     return SQLITE_IOERR_DELETE;
-  }
-
-  if (not dir.isDir())
-  {
-    return SQLITE_IOERR_DELETE;
-  }
-
-  if (not dir.remove(zPath))
-  {
-    Serial.println("VFS_DEBUG_DELETE_ERROR");
-    return SQLITE_IOERR_DELETE;
-  }
-
-  if (not dir.sync())
-  {
-    return SQLITE_IOERR_DIR_FSYNC;
-  }
-
-  if (not dir.close())
-  {
-    return SQLITE_IOERR_DIR_CLOSE;
   }
   
   return SQLITE_OK;
 }
-
-const int ACCESS_FAILED = 0;
-const int ACCESS_SUCCESFUL = 1;
 
 /*
 ** Query the file-system to see if the named file exists, is readable or
@@ -612,45 +569,22 @@ static int demoAccess(
   int flags, 
   int *pResOut
 ){
-  assert( flags==SQLITE_ACCESS_EXISTS
-       || flags==SQLITE_ACCESS_READ
-       || flags==SQLITE_ACCESS_READWRITE
-  );
+  assert(flags==SQLITE_ACCESS_EXISTS ||
+         flags==SQLITE_ACCESS_READ ||
+         flags==SQLITE_ACCESS_READWRITE);
 
-  FileVFS file;
-  
-  if (file.exists(zPath))
+  // Because we cannot/don't need to check access permissions,
+  // we will set *pResOut to T41SQLite::ACCESS_SUCCESFUL,
+  // if a file with the given name exists.
+  if (T41SQLite::getInstance().getFilesystem()->exists(zPath))
   {
-    if (flags == SQLITE_ACCESS_EXISTS)
-    {
-      *pResOut = ACCESS_SUCCESFUL;
-      return SQLITE_OK;
-    }
-    else if (flags == SQLITE_ACCESS_READ)
-    {
-      file.open(zPath, O_RDONLY);
-
-      if (file && file.isReadable())
-      {
-        *pResOut = ACCESS_SUCCESFUL;
-        return SQLITE_OK;
-      }
-    }
-    else if (flags == SQLITE_ACCESS_READWRITE)
-    {
-      file.open(zPath, O_RDWR);
-
-      if (file && file.isReadable() && file.isWritable())
-      {
-        *pResOut = ACCESS_SUCCESFUL;
-        return SQLITE_OK;
-      }
-    }
-
-    return SQLITE_ERROR;
+    *pResOut = T41SQLite::ACCESS_SUCCESFUL;
+  }
+  else
+  {
+    *pResOut = T41SQLite::ACCESS_FAILED;
   }
   
-  *pResOut = ACCESS_FAILED;
   return SQLITE_OK;
 }
 

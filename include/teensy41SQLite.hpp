@@ -3,17 +3,22 @@
 
 #include "sqlite3.h"
 
-#include <SdFat.h>
+#include <FS.h>
 
 class T41SQLite
 {
+  public:
+    static const int ACCESS_FAILED = 0;
+    static const int ACCESS_SUCCESFUL = 1;
+    
   private:
     int m_sectorSize = 0;
     int m_deviceCharacteristics = 0;
-    String m_dbDirFullpath;
+    FS* m_filesystem = nullptr;
+    String m_dbDirFullpath = "/";
 
   private:
-    T41SQLite();
+    T41SQLite() = default;
     ~T41SQLite() = default;
 
     int calculateSectorSizeInBytes(unsigned char in_lowBitsSectorSizeAsExponentForPowerOfTwo,
@@ -30,15 +35,17 @@ class T41SQLite
       return instance;
     }
 
-    int begin();
+    int begin(FS* io_filesystem);
     int end();
-
+    
+    void setFilesystem(FS* io_filesystem);
+    FS* getFilesystem();
+    
     void setDBDirFullPath(const String& in_dbDirFullpath);
     const String& getDBDirFullPath() const;
 
     void resetSectorSize();
     void setSectorSize(int in_size);
-    bool setSectorSizeAuto(SdFat& in_sdFat);
     int getSectorSize() const;
 
     bool assumeSingleSectorWriteIsAtomic();

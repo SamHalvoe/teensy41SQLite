@@ -2,7 +2,7 @@
 
 #include "teensy41SQLite.hpp"
 
-SdFat sd;
+#include <SD.h>
 
 void setupSerial(size_t in_serialBaudrate)
 {
@@ -55,18 +55,9 @@ void checkSQLiteError(sqlite3* in_db, int in_rc)
 
 void testSQLite()
 {
-  int rc = T41SQLite::getInstance().begin();
-
-  if (rc != SQLITE_OK)
-  {
-    Serial.println("testSQLite - beginSQLite: Failed!");
-
-    return;
-  }
-
   sqlite3* db;
   Serial.println("---- testSQLite - sqlite3_open - begin ----");
-  rc = sqlite3_open("test.db", &db);
+  int rc = sqlite3_open("test.db", &db);
   checkSQLiteError(db, rc);
   Serial.println("---- testSQLite - sqlite3_open - end ----");
   
@@ -115,11 +106,25 @@ void setup()
   setupSerial(115200);
   delaySetup(10);
 
-  sd.begin(SdioConfig(FIFO_SDIO));
-  if (not sd.remove("test.db")) { Serial.println("remove test.db failed"); }
-  if (not sd.remove("test.db-journal")) { Serial.println("remove test.db-journal failed"); }
-  
-  testSQLite();
+  if (not SD.begin(BUILTIN_SDCARD))
+  {
+    Serial.println("SD.begin() failed! - Halting!");
+    while (true) { delay(1000); }
+  }
+
+  int rc = T41SQLite::getInstance().begin(&SD);
+
+  if (rc == SQLITE_OK)
+  {
+    if (not SD.remove("test.db")) { Serial.println("remove test.db failed"); }
+    if (not SD.remove("test.db-journal")) { Serial.println("remove test.db-journal failed"); }
+
+    testSQLite();
+  }
+  else
+  {
+    Serial.println("T41SQLite::getInstance().begin() failed!");
+  }
 }
 
 void loop()
