@@ -276,12 +276,10 @@ static int demoRead(
   Serial.print("VFS_DEBUG_READ_CUR ");
   Serial.println(p->fd->curPosition());
 
-  if (not p->fd->seekSet(iOfst))
+  if (not p->fd->seekSet(min(iOfst, static_cast<sqlite_int64>(p->fd->size()))))
   {
-    Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK_FAIL ");
-    Serial.println(p->fd->curPosition());
-    
-    //return SQLITE_IOERR_READ;
+    Serial.println("VFS_DEBUG_READ_SEEK_FAIL");
+    return SQLITE_IOERR_READ;
   }
 
   Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
@@ -306,7 +304,7 @@ static int demoRead(
 
     Serial.println("VFS_DEBUG_READ - END (SQLITE_IOERR_SHORT_READ)");
 
-    return SQLITE_IOERR_SHORT_READ; // 
+    return SQLITE_IOERR_SHORT_READ; // ok
   }
   
   Serial.println("VFS_DEBUG_READ - END (ERROR)");

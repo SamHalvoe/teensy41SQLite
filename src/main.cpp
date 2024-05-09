@@ -42,7 +42,7 @@ void checkSQLiteError(sqlite3* in_db, int in_rc)
 {
   if (in_rc == SQLITE_OK)
   {
-    Serial.println(">>>> testSQLite - sqlite3_exec - success <<<<");
+    Serial.println(">>>> testSQLite - operation - success <<<<");
   }
   else
   {
@@ -67,19 +67,20 @@ void testSQLite()
   sqlite3* db;
   Serial.println("---- testSQLite - sqlite3_open - begin ----");
   rc = sqlite3_open("test.db", &db);
+  checkSQLiteError(db, rc);
   Serial.println("---- testSQLite - sqlite3_open - end ----");
   
   if (rc == SQLITE_OK)
   {
     Serial.println("---- testSQLite - sqlite3_exec - begin ----");
     rc = sqlite3_exec(db, "CREATE TABLE Persons(PersonID INT);", NULL, 0, NULL);
-    Serial.println("---- testSQLite - sqlite3_exec - end ----");
     checkSQLiteError(db, rc);
+    Serial.println("---- testSQLite - sqlite3_exec - end ----");
 
     Serial.println("---- testSQLite - sqlite3_exec - begin ----");
     rc = sqlite3_exec(db, "INSERT INTO Persons (PersonID) VALUES (127);", NULL, 0, NULL);
-    Serial.println("---- testSQLite - sqlite3_exec - end ----");
     checkSQLiteError(db, rc);
+    Serial.println("---- testSQLite - sqlite3_exec - end ----");
 
     Serial.println("---- testSQLite - sqlite3_prepare_v2 - begin ----");
     sqlite3_stmt *stmt;
@@ -98,12 +99,14 @@ void testSQLite()
     }
     Serial.println("---- testSQLite - sqlite3_step - end ----");
     Serial.println("---- testSQLite - sqlite3_finalize - begin ----");
-    sqlite3_finalize(stmt);
+    rc = sqlite3_finalize(stmt);
+    checkSQLiteError(db, rc);
     Serial.println("---- testSQLite - sqlite3_finalize - end ----");
   }
 
   Serial.println("---- testSQLite - sqlite3_close - begin ----");
-  sqlite3_close(db);
+  rc = sqlite3_close(db);
+  checkSQLiteError(db, rc);
   Serial.println("---- testSQLite - sqlite3_close - end ----");
 }
 
@@ -115,6 +118,7 @@ void setup()
   sd.begin(SdioConfig(FIFO_SDIO));
   if (not sd.remove("test.db")) { Serial.println("remove test.db failed"); }
   if (not sd.remove("test.db-journal")) { Serial.println("remove test.db-journal failed"); }
+  
   testSQLite();
 }
 
