@@ -38,6 +38,21 @@ void delaySetup(uint8_t in_seconds = 15)
   Serial.println(" Continue setup!");
 }
 
+void checkSQLiteError(sqlite3* in_db, int in_rc)
+{
+  if (in_rc == SQLITE_OK)
+  {
+    Serial.println(">>>> testSQLite - sqlite3_exec - success <<<<");
+  }
+  else
+  {
+    int ext_rc = sqlite3_extended_errcode(in_db);
+    Serial.print(ext_rc);
+    Serial.print(": ");
+    Serial.println(sqlite3_errstr(ext_rc));
+  }
+}
+
 void testSQLite()
 {
   int rc = T41SQLite::getInstance().begin();
@@ -50,26 +65,46 @@ void testSQLite()
   }
 
   sqlite3* db;
-  Serial.println("testSQLite - sqlite3_open - begin");
+  Serial.println("---- testSQLite - sqlite3_open - begin ----");
   rc = sqlite3_open("test.db", &db);
-  Serial.println("testSQLite - sqlite3_open - end");
+  Serial.println("---- testSQLite - sqlite3_open - end ----");
   
   if (rc == SQLITE_OK)
   {
+    Serial.println("---- testSQLite - sqlite3_exec - begin ----");
     rc = sqlite3_exec(db, "CREATE TABLE Persons(PersonID INT);", NULL, 0, NULL);
+    Serial.println("---- testSQLite - sqlite3_exec - end ----");
+    checkSQLiteError(db, rc);
 
-    if (rc != SQLITE_OK)
+    Serial.println("---- testSQLite - sqlite3_exec - begin ----");
+    rc = sqlite3_exec(db, "INSERT INTO Persons (PersonID) VALUES (127);", NULL, 0, NULL);
+    Serial.println("---- testSQLite - sqlite3_exec - end ----");
+    checkSQLiteError(db, rc);
+
+    Serial.println("---- testSQLite - sqlite3_prepare_v2 - begin ----");
+    sqlite3_stmt *stmt;
+    rc = sqlite3_prepare_v2(db, "SELECT * FROM Persons;", -1, &stmt, 0); // create SQL statement
+    checkSQLiteError(db, rc);
+    Serial.println("---- testSQLite - sqlite3_prepare_v2 - end ----");
+    Serial.println("---- testSQLite - sqlite3_step - begin ----");
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW)
     {
-      int ext_rc = sqlite3_extended_errcode(db);
-      Serial.print(ext_rc);
-      Serial.print(": ");
-      Serial.println(sqlite3_errstr(ext_rc));
+      Serial.println(sqlite3_column_int(stmt, 0));
     }
+    else
+    {
+      checkSQLiteError(db, rc);
+    }
+    Serial.println("---- testSQLite - sqlite3_step - end ----");
+    Serial.println("---- testSQLite - sqlite3_finalize - begin ----");
+    sqlite3_finalize(stmt);
+    Serial.println("---- testSQLite - sqlite3_finalize - end ----");
   }
 
-  Serial.println("testSQLite - sqlite3_close - begin");
+  Serial.println("---- testSQLite - sqlite3_close - begin ----");
   sqlite3_close(db);
-  Serial.println("testSQLite - sqlite3_close - end");
+  Serial.println("---- testSQLite - sqlite3_close - end ----");
 }
 
 void setup()

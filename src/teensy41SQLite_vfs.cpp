@@ -246,7 +246,14 @@ static int demoRead(
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
-){
+)
+{
+  Serial.println("VFS_DEBUG_READ - BEGIN");
+  Serial.print("VFS_DEBUG_READ_iAMT ");
+  Serial.println(iAmt);
+  Serial.print("VFS_DEBUG_READ_OFFSET ");
+  Serial.println(iOfst);
+
   DemoFile *p = (DemoFile*)pFile;
   int nRead;                      /* Return value from read() */
   int rc;                         /* Return code from demoFlushBuffer() */
@@ -263,17 +270,11 @@ static int demoRead(
   {
     return rc;
   }
-
-  Serial.println("VFS_DEBUG_READ");
-
-  //return SQLITE_OK;
-
+  
   Serial.print("VFS_DEBUG_READ_FILE_SIZE ");
   Serial.println(p->fd->size());
   Serial.print("VFS_DEBUG_READ_CUR ");
   Serial.println(p->fd->curPosition());
-  Serial.print("VFS_DEBUG_READ_OFFSET ");
-  Serial.println(iOfst);
 
   if (not p->fd->seekSet(iOfst))
   {
@@ -287,9 +288,13 @@ static int demoRead(
   Serial.println(p->fd->curPosition());
 
   nRead = p->fd->read(zBuf, iAmt);
+  Serial.print("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
+  Serial.println(nRead);
 
   if (nRead == iAmt)
   {
+    Serial.println("VFS_DEBUG_READ - END (OK)");
+
     return SQLITE_OK;
   }
   else if (nRead >= 0)
@@ -299,8 +304,12 @@ static int demoRead(
       memset(&((char*)zBuf)[nRead], 0, iAmt - nRead);
     }
 
-    return SQLITE_IOERR_SHORT_READ;
+    Serial.println("VFS_DEBUG_READ - END (SQLITE_IOERR_SHORT_READ)");
+
+    return SQLITE_IOERR_SHORT_READ; // 
   }
+  
+  Serial.println("VFS_DEBUG_READ - END (ERROR)");
 
   return SQLITE_IOERR_READ; // nRead < 0 --> call to p->fd->read(zBuf, iAmt) failed
 }
@@ -493,9 +502,9 @@ static int demoOpen(
 
   Serial.println("VFS_DEBUG_OPEN");
 
-  DemoFile *p = (DemoFile*)pFile; /* Populate this structure */
+  DemoFile* p = (DemoFile*)pFile; /* Populate this structure */
   int oflags = 0;                 /* flags to pass to open() call */
-  char *aBuf = 0;
+  char* aBuf = 0;
 
   if( zName==0 ){
     return SQLITE_IOERR;
@@ -504,17 +513,20 @@ static int demoOpen(
   Serial.print("VFS_DEBUG_OPEN_FILE ");
   Serial.println(zName);
 
-  if( flags&SQLITE_OPEN_MAIN_JOURNAL ){
+  if (flags & SQLITE_OPEN_MAIN_JOURNAL)
+  {
     aBuf = (char *)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
-    if( !aBuf ){
+    
+    if (not aBuf)
+    {
       return SQLITE_NOMEM;
     }
   }
 
-  if( flags&SQLITE_OPEN_EXCLUSIVE ) oflags |= O_EXCL;
-  if( flags&SQLITE_OPEN_CREATE )    oflags |= O_CREAT;
-  if( flags&SQLITE_OPEN_READONLY )  oflags |= O_RDONLY;
-  if( flags&SQLITE_OPEN_READWRITE ) oflags |= O_RDWR;
+  if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= O_EXCL;
+  if (flags & SQLITE_OPEN_CREATE)    oflags |= O_CREAT;
+  if (flags & SQLITE_OPEN_READONLY)  oflags |= O_RDONLY;
+  if (flags & SQLITE_OPEN_READWRITE) oflags |= O_RDWR;
 
   memset(p, 0, sizeof(DemoFile));
   p->fd = new FileVFS();
@@ -585,34 +597,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
   {
     return SQLITE_IOERR_DIR_CLOSE;
   }
-
-  /*if (dirSync != 0)
-  {
-    String dirPath(zPath);
-    dirPath = dirPath.substring(0, dirPath.lastIndexOf('/'));
-    FileVFS dir;
-
-    if (not dir.open(dirPath.c_str(), O_RDONLY))
-    {
-      return SQLITE_IOERR_DIR_FSYNC;
-    }
-
-    if (not dir.isDir())
-    {
-      return SQLITE_IOERR_DIR_FSYNC;
-    }
-
-    if (not dir.sync())
-    {
-      return SQLITE_IOERR_DIR_FSYNC;
-    }
-
-    if (not dir.close())
-    {
-      return SQLITE_IOERR_DIR_CLOSE;
-    }
-  }*/
-
+  
   return SQLITE_OK;
 }
 
