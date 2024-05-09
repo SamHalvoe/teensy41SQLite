@@ -165,6 +165,8 @@ static int demoDirectWrite(
 ){
   size_t nWrite;                  /* Return value from write() */
   
+  Serial.println("VFS_DEBUG_DIRECT_WRITE");
+
   if (iAmt < 0) // is a size type, must not be less than zero
   {
     return SQLITE_IOERR_WRITE;
@@ -187,6 +189,9 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
+  Serial.print("VFS_DEBUG_DIRECT_WRITE_SIZE: ");
+  Serial.println(p->fd->size());
+
   return SQLITE_OK;
 }
 
@@ -195,9 +200,13 @@ static int demoDirectWrite(
 ** no-op if this particular file does not have a buffer (i.e. it is not
 ** a journal file) or if the buffer is currently empty.
 */
-static int demoFlushBuffer(DemoFile *p){
+static int demoFlushBuffer(DemoFile *p)
+{
   int rc = SQLITE_OK;
-  if( p->nBuffer ){
+  Serial.print("VFS_DEBUG_FLUSH_BUFFER ");
+  Serial.println(p->nBuffer);
+  if (p->nBuffer)
+  {
     rc = demoDirectWrite(p, p->aBuffer, p->nBuffer, p->iBufferOfst);
     p->nBuffer = 0;
   }
@@ -212,6 +221,12 @@ static int demoClose(sqlite3_file *pFile){
   DemoFile *p = (DemoFile*)pFile;
   rc = demoFlushBuffer(p);
   sqlite3_free(p->aBuffer);
+
+  Serial.println("VFS_DEBUG_CLOSE");
+  Serial.print("VFS_DEBUG_CLOSE_FILE ");
+  char fileName[16];
+  p->fd->getName(fileName, 16);
+  Serial.println(fileName);
   
   if (not p->fd->close() && rc == SQLITE_OK)
   {
@@ -249,13 +264,27 @@ static int demoRead(
     return rc;
   }
 
-  Serial.print("VFS_DEBUG: ");
+  Serial.println("VFS_DEBUG_READ");
+
+  //return SQLITE_OK;
+
+  Serial.print("VFS_DEBUG_READ_FILE_SIZE ");
+  Serial.println(p->fd->size());
+  Serial.print("VFS_DEBUG_READ_CUR ");
+  Serial.println(p->fd->curPosition());
+  Serial.print("VFS_DEBUG_READ_OFFSET ");
   Serial.println(iOfst);
 
   if (not p->fd->seekSet(iOfst))
   {
-    return SQLITE_INTERNAL;//SQLITE_IOERR_READ;
+    Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK_FAIL ");
+    Serial.println(p->fd->curPosition());
+    
+    //return SQLITE_IOERR_READ;
   }
+
+  Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
+  Serial.println(p->fd->curPosition());
 
   nRead = p->fd->read(zBuf, iAmt);
 
@@ -286,6 +315,8 @@ static int demoWrite(
   sqlite_int64 iOfst
 ){
   DemoFile *p = (DemoFile*)pFile;
+
+  Serial.println("VFS_DEBUG_WRITE");
   
   if (p->aBuffer)
   {
@@ -460,6 +491,8 @@ static int demoOpen(
     demoDeviceCharacteristics     /* xDeviceCharacteristics */
   };
 
+  Serial.println("VFS_DEBUG_OPEN");
+
   DemoFile *p = (DemoFile*)pFile; /* Populate this structure */
   int oflags = 0;                 /* flags to pass to open() call */
   char *aBuf = 0;
@@ -467,6 +500,9 @@ static int demoOpen(
   if( zName==0 ){
     return SQLITE_IOERR;
   }
+
+  Serial.print("VFS_DEBUG_OPEN_FILE ");
+  Serial.println(zName);
 
   if( flags&SQLITE_OPEN_MAIN_JOURNAL ){
     aBuf = (char *)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
@@ -512,15 +548,45 @@ static int demoOpen(
 ** is non-zero, then ensure the file-system modification to delete the
 ** file has been synced to disk before returning.
 */
-static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
-  FileVFS file;
+static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
+{
+  Serial.print("VFS_DEBUG_DELETE_PATH ");
+  Serial.println(zPath);
+  
+  String dirPath(zPath);
+  dirPath = dirPath.substring(0, dirPath.lastIndexOf('/') + 1);
+  FileVFS dir;
 
-  if (not file.remove(zPath))
+  Serial.print("VFS_DEBUG_DELETE_DIR_PATH ");
+  Serial.println(dirPath);
+
+  if (not dir.open(dirPath.c_str(), O_RDONLY))
   {
     return SQLITE_IOERR_DELETE;
   }
 
-  if (dirSync != 0)
+  if (not dir.isDir())
+  {
+    return SQLITE_IOERR_DELETE;
+  }
+
+  if (not dir.remove(zPath))
+  {
+    Serial.println("VFS_DEBUG_DELETE_ERROR");
+    return SQLITE_IOERR_DELETE;
+  }
+
+  if (not dir.sync())
+  {
+    return SQLITE_IOERR_DIR_FSYNC;
+  }
+
+  if (not dir.close())
+  {
+    return SQLITE_IOERR_DIR_CLOSE;
+  }
+
+  /*if (dirSync != 0)
   {
     String dirPath(zPath);
     dirPath = dirPath.substring(0, dirPath.lastIndexOf('/'));
@@ -545,7 +611,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
     {
       return SQLITE_IOERR_DIR_CLOSE;
     }
-  }
+  }*/
 
   return SQLITE_OK;
 }
@@ -624,8 +690,13 @@ static int demoFullPathname(
   int nPathOut,                   /* Size of output buffer in bytes */
   char *zPathOut                  /* Pointer to output buffer */
 ){
-  sqlite3_snprintf(nPathOut, zPathOut, "%s", zPath);
-  zPathOut[nPathOut-1] = '\0';
+  String fullPath = T41SQLite::getInstance().getDBDirFullPath();
+  fullPath.append(zPath);
+  sqlite3_snprintf(nPathOut, zPathOut, "%s", fullPath.c_str());
+  zPathOut[nPathOut - 1] = '\0';
+
+  Serial.print("VFS_DEBUG_FULL_PATH ");
+  Serial.println(zPathOut);
 
   return SQLITE_OK;
 }

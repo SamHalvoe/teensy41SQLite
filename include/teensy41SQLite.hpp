@@ -10,9 +10,10 @@ class T41SQLite
   private:
     int m_sectorSize = 0;
     int m_deviceCharacteristics = 0;
+    String m_dbDirFullpath;
 
   private:
-    T41SQLite() = default;
+    T41SQLite();
     ~T41SQLite() = default;
 
     int calculateSectorSizeInBytes(unsigned char in_lowBitsSectorSizeAsExponentForPowerOfTwo,
@@ -31,6 +32,9 @@ class T41SQLite
 
     int begin();
     int end();
+
+    void setDBDirFullPath(const String& in_dbDirFullpath);
+    const String& getDBDirFullPath() const;
 
     void resetSectorSize();
     void setSectorSize(int in_size);

@@ -1,5 +1,8 @@
 #include "teensy41SQLite.hpp"
 
+T41SQLite::T41SQLite() : m_dbDirFullpath("/")
+{}
+
 int T41SQLite::begin()
 {
   return sqlite3_initialize();
@@ -8,6 +11,16 @@ int T41SQLite::begin()
 int T41SQLite::end()
 {
   return sqlite3_shutdown();
+}
+
+void T41SQLite::setDBDirFullPath(const String& in_dbDirFullpath)
+{
+  m_dbDirFullpath = in_dbDirFullpath;
+}
+
+const String &T41SQLite::getDBDirFullPath() const
+{
+  return m_dbDirFullpath;
 }
 
 void T41SQLite::resetSectorSize()
