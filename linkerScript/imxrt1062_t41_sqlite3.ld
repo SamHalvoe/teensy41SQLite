@@ -34,10 +34,10 @@ SECTIONS
 		. = ALIGN(4);
 	} > FLASH
 
-	.halvoeFlash : {
-		*sqlite3*.o (.text .text*)
-		*teensy41SQLite_vfs*.o (.text .text*)
-		*teensy41SQLite*.o (.text .text*)
+	.sqliteFlash : {
+		*sqlite3*.o (.text .text* .rodata .rodata*)
+		*teensy41SQLite_vfs*.o (.text .text* .rodata .rodata*)
+		*teensy41SQLite*.o (.text .text* .rodata .rodata*)
 		. = ALIGN(4);
 	} > FLASH
 

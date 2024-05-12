@@ -487,10 +487,10 @@ static int demoOpen(
   Serial.println("VFS_DEBUG_OPEN");
 
   DemoFile* p = (DemoFile*)pFile; /* Populate this structure */
-  int oflags = 0;                 /* flags to pass to open() call */
   char* aBuf = 0;
 
-  if( zName==0 ){
+  if (zName == 0)
+  {
     return SQLITE_IOERR;
   }
 
@@ -506,19 +506,8 @@ static int demoOpen(
       return SQLITE_NOMEM;
     }
   }
-
-  /*if (flags & SQLITE_OPEN_EXCLUSIVE) oflags |= O_EXCL;
-  if (flags & SQLITE_OPEN_CREATE)    oflags |= O_CREAT;
-  if (flags & SQLITE_OPEN_READONLY)  oflags |= O_RDONLY;
-  if (flags & SQLITE_OPEN_READWRITE) oflags |= O_RDWR;*/
   
-  uint8_t openMode = FILE_READ;
-
-  if (not (flags & SQLITE_OPEN_READONLY))
-  {
-    openMode = FILE_WRITE;
-  }
-
+  uint8_t openMode = (flags & SQLITE_OPEN_READONLY) ? FILE_READ : FILE_WRITE;
   memset(p, 0, sizeof(DemoFile));
   p->fd = new FileVFS(T41SQLite::getInstance().getFilesystem()->open(zName, openMode));
   
