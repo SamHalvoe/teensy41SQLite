@@ -8,6 +8,7 @@
 class T41SQLite
 {
   public:
+    static const int IS_DEFAULT_VFS = 1;
     static const int ACCESS_FAILED = 0;
     static const int ACCESS_SUCCESFUL = 1;
     

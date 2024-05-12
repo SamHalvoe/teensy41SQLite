@@ -21,9 +21,9 @@
 **   The code in this file implements a minimal SQLite VFS that can be 
 **   used on Teensy 4.x The following system calls are used:
 **
-**    File-system: open(), remove() <SdFat.h>
-**    File IO:     open(), read(), write(), fsync() --> sync(),
-**                 close(), fstat() --> size() (only used to get file size) <SdFat.h>
+**    File-system: open(), remove() <FS.h>
+**    File IO:     open(), read(), write(), fsync() --> flush(),
+**                 close(), fstat() --> size() (only used to get file size) <FS.h>
 **    Other:       delayMicroseconds(), elapsedMicros <elapsedMillis.h>, now() <TimeLib.h>
 **
 **   The following VFS features are omitted:
@@ -88,9 +88,9 @@
 **   start of a sector.
 **
 **   To work around this, the code in this file allocates a fixed size
-**   buffer of SQLITE_DEMOVFS_BUFFERSZ using sqlite3_malloc() whenever a 
+**   buffer of SQLITE_VFS_JOURNAL_BUFFERSZ using sqlite3_malloc() whenever a 
 **   journal file is opened. It uses the buffer to coalesce sequential
-**   writes into aligned SQLITE_DEMOVFS_BUFFERSZ blocks. When SQLite
+**   writes into aligned SQLITE_VFS_JOURNAL_BUFFERSZ blocks. When SQLite
 **   invokes the xSync() method to sync the contents of the file to disk,
 **   all accumulated data is written out, even if it does not constitute
 **   a complete block. This means the actual IO to create the rollback 
@@ -108,7 +108,7 @@
 **   operations.
 */
 
-// ---- remaining sqlite demovfs includes ----
+// ---- remaining sqlite teensyvfs includes ----
 
 #include <assert.h>
 
@@ -119,14 +119,16 @@
 #include <elapsedMillis.h>
 #include <TimeLib.h>
 
-using FileVFS = File; // define FileVFS class, which actually interfaces with the storage hardware (e.g. a sd card)
-#define FS_VFS_NAME "t41_vfs" // teensy 4.1 vfs
+// define TeensyFile type, which actually interfaces with the storage hardware (e.g. a sd card)
+using TeensyFile = File;
+// Name: Teensy 4.1 VFS
+#define TEENSY_VFS_NAME "T41_VFS" 
 
 /*
 ** Size of the write buffer used by journal files in bytes.
 */
-#ifndef SQLITE_DEMOVFS_BUFFERSZ
-# define SQLITE_DEMOVFS_BUFFERSZ 8192
+#ifndef SQLITE_VFS_JOURNAL_BUFFERSZ
+  #define SQLITE_VFS_JOURNAL_BUFFERSZ 8192
 #endif
 
 /*
@@ -136,25 +138,26 @@ using FileVFS = File; // define FileVFS class, which actually interfaces with th
 
 /*
 ** When using this VFS, the sqlite3_file* handles that SQLite uses are
-** actually pointers to instances of type DemoFile.
+** actually pointers to instances of type TeensyVFSFile.
 */
-typedef struct DemoFile DemoFile;
-struct DemoFile {
-  sqlite3_file base;              /* Base class. Must be first. */
-  FileVFS* fd;                    /* File descriptor */
+typedef struct TeensyVFSFile TeensyVFSFile;
+struct TeensyVFSFile
+{
+  sqlite3_file sqliteFile;        /* Base class. Must be first. */
+  TeensyFile* teensyFile;         /* File descriptor */
 
-  char *aBuffer;                  /* Pointer to malloc'd buffer */
+  char* aBuffer;                  /* Pointer to malloc'd buffer */
   int nBuffer;                    /* Valid bytes of data in zBuffer */
   sqlite3_int64 iBufferOfst;      /* Offset in file of zBuffer[0] */
 };
 
 /*
 ** Write directly to the file passed as the first argument. Even if the
-** file has a write-buffer (DemoFile.aBuffer), ignore it.
+** file has a write-buffer (TeensyVFSFile.aBuffer), ignore it.
 */
-static int demoDirectWrite(
-  DemoFile *p,                    /* File handle */
-  const void *zBuf,               /* Buffer containing data to write */
+static int teensyDirectWrite(
+  TeensyVFSFile* p,               /* File handle */
+  const void* zBuf,               /* Buffer containing data to write */
   int iAmt,                       /* Size of data to write in bytes */
   sqlite_int64 iOfst              /* File offset to write to */
 ){
@@ -165,40 +168,40 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
-  if (not p->fd->seek(iOfst, SeekSet))
+  if (not p->teensyFile->seek(iOfst, SeekSet))
   {
     return SQLITE_IOERR_WRITE;
   }
 
   size_t toWrite = static_cast<size_t>(iAmt);
-  size_t nWrite = p->fd->write(zBuf, toWrite);
+  size_t nWrite = p->teensyFile->write(zBuf, toWrite);
 
   if (nWrite != toWrite)
   {
     return SQLITE_IOERR_WRITE;
   }
 
-  p->fd->flush();
+  p->teensyFile->flush();
 
   Serial.print("VFS_DEBUG_DIRECT_WRITE_SIZE: ");
-  Serial.println(p->fd->size());
+  Serial.println(p->teensyFile->size());
 
   return SQLITE_OK;
 }
 
 /*
-** Flush the contents of the DemoFile.aBuffer buffer to disk. This is a
+** Flush the contents of the TeensyVFSFile.aBuffer buffer to disk. This is a
 ** no-op if this particular file does not have a buffer (i.e. it is not
 ** a journal file) or if the buffer is currently empty.
 */
-static int demoFlushBuffer(DemoFile *p)
+static int teensyFlushBuffer(TeensyVFSFile *p)
 {
   Serial.print("VFS_DEBUG_FLUSH_BUFFER ");
   Serial.println(p->nBuffer);
 
   if (p->nBuffer)
   {
-    int rc = demoDirectWrite(p, p->aBuffer, p->nBuffer, p->iBufferOfst);
+    int rc = teensyDirectWrite(p, p->aBuffer, p->nBuffer, p->iBufferOfst);
     p->nBuffer = 0;
 
     if (rc != SQLITE_OK)
@@ -213,17 +216,17 @@ static int demoFlushBuffer(DemoFile *p)
 /*
 ** Close a file.
 */
-static int demoClose(sqlite3_file *pFile)
+static int teensyClose(sqlite3_file *pFile)
 {
-  DemoFile *p = (DemoFile*)pFile;
-  int rc = demoFlushBuffer(p);
+  TeensyVFSFile *p = (TeensyVFSFile*)pFile;
+  int rc = teensyFlushBuffer(p);
   sqlite3_free(p->aBuffer);
 
   Serial.println("VFS_DEBUG_CLOSE");
   Serial.print("VFS_DEBUG_CLOSE_FILE ");
-  Serial.println(p->fd->name());
+  Serial.println(p->teensyFile->name());
 
-  p->fd->close();
+  p->teensyFile->close();
 
   return rc;
 }
@@ -231,7 +234,7 @@ static int demoClose(sqlite3_file *pFile)
 /*
 ** Read data from a file.
 */
-static int demoRead(
+static int teensyRead(
   sqlite3_file *pFile, 
   void *zBuf, 
   int iAmt, 
@@ -244,7 +247,7 @@ static int demoRead(
   Serial.print("VFS_DEBUG_READ_OFFSET ");
   Serial.println(iOfst);
 
-  DemoFile *p = (DemoFile*)pFile;
+  TeensyVFSFile *p = (TeensyVFSFile*)pFile;
 
   /* Flush any data in the write buffer to disk in case this operation
   ** is trying to read data the file-region currently cached in the buffer.
@@ -252,7 +255,7 @@ static int demoRead(
   ** unnecessary write here, but in practice SQLite will rarely read from
   ** a journal file when there is data cached in the write-buffer.
   */
-  int rc = demoFlushBuffer(p);
+  int rc = teensyFlushBuffer(p);
 
   if (rc != SQLITE_OK)
   {
@@ -260,22 +263,22 @@ static int demoRead(
   }
   
   Serial.print("VFS_DEBUG_READ_FILE_SIZE ");
-  Serial.println(p->fd->size());
+  Serial.println(p->teensyFile->size());
   Serial.print("VFS_DEBUG_READ_CUR ");
-  Serial.println(p->fd->position());
+  Serial.println(p->teensyFile->position());
 
-  uint64_t seekPosition = min(static_cast<uint64_t>(iOfst), p->fd->size());
-  if (not p->fd->seek(seekPosition, SeekSet))
+  uint64_t seekPosition = min(static_cast<uint64_t>(iOfst), p->teensyFile->size());
+  if (not p->teensyFile->seek(seekPosition, SeekSet))
   {
     Serial.println("VFS_DEBUG_READ_SEEK_FAIL");
     return SQLITE_IOERR_READ;
   }
 
   Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
-  Serial.println(p->fd->position());
+  Serial.println(p->teensyFile->position());
 
   size_t toRead = static_cast<size_t>(iAmt);
-  size_t nRead = p->fd->read(zBuf, toRead);
+  size_t nRead = p->teensyFile->read(zBuf, toRead);
   Serial.print("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
   Serial.println(nRead);
 
@@ -299,19 +302,19 @@ static int demoRead(
   
   Serial.println("VFS_DEBUG_READ - END (ERROR)");
 
-  return SQLITE_IOERR_READ; // nRead < 0 --> call to p->fd->read(zBuf, iAmt) failed
+  return SQLITE_IOERR_READ; // nRead < 0 --> call to p->teensyFile->read(zBuf, iAmt) failed
 }
 
 /*
 ** Write data to a crash-file.
 */
-static int demoWrite(
+static int teensyWrite(
   sqlite3_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
 ){
-  DemoFile *p = (DemoFile*)pFile;
+  TeensyVFSFile *p = (TeensyVFSFile*)pFile;
 
   Serial.println("VFS_DEBUG_WRITE");
   
@@ -329,10 +332,10 @@ static int demoWrite(
       ** following the data already buffered, flush the buffer. Flushing
       ** the buffer is a no-op if it is empty.  
       */
-      if (p->nBuffer == SQLITE_DEMOVFS_BUFFERSZ ||
+      if (p->nBuffer == SQLITE_VFS_JOURNAL_BUFFERSZ ||
           p->iBufferOfst + p->nBuffer != i)
       {
-        int rc = demoFlushBuffer(p);
+        int rc = teensyFlushBuffer(p);
         if (rc != SQLITE_OK)
         {
           return rc;
@@ -343,7 +346,7 @@ static int demoWrite(
       p->iBufferOfst = i - p->nBuffer;
 
       /* Copy as much data as possible into the buffer. */
-      nCopy = SQLITE_DEMOVFS_BUFFERSZ - p->nBuffer;
+      nCopy = SQLITE_VFS_JOURNAL_BUFFERSZ - p->nBuffer;
       if (nCopy > n)
       {
         nCopy = n;
@@ -358,7 +361,7 @@ static int demoWrite(
   }
   else
   {
-    return demoDirectWrite(p, zBuf, iAmt, iOfst);
+    return teensyDirectWrite(p, zBuf, iAmt, iOfst);
   }
 
   return SQLITE_OK;
@@ -368,14 +371,14 @@ static int demoWrite(
 ** The xTruncate method truncates a file to be nByte bytes in length. If the file is already nByte bytes or less in length then this method is a no-op.
 ** The xTruncate method returns SQLITE_OK on success and SQLITE_IOERR_TRUNCATE if anything goes wrong. 
 */
-static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size)
+static int teensyTruncate(sqlite3_file *pFile, sqlite_int64 size)
 {
-  DemoFile* p = (DemoFile*)pFile;
+  TeensyVFSFile* p = (TeensyVFSFile*)pFile;
   size_t reducedSize = static_cast<size_t>(size);
 
-  if (p->fd->size() > reducedSize)
+  if (p->teensyFile->size() > reducedSize)
   {
-    return p->fd->truncate(reducedSize) ? SQLITE_OK : SQLITE_IOERR_TRUNCATE;
+    return p->teensyFile->truncate(reducedSize) ? SQLITE_OK : SQLITE_IOERR_TRUNCATE;
   }
 
   return SQLITE_OK;
@@ -384,17 +387,17 @@ static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size)
 /*
 ** Sync the contents of the file to the persistent media.
 */
-static int demoSync(sqlite3_file *pFile, int flags)
+static int teensySync(sqlite3_file *pFile, int flags)
 {
-  DemoFile* p = (DemoFile*)pFile;
-  int rc = demoFlushBuffer(p);
+  TeensyVFSFile* p = (TeensyVFSFile*)pFile;
+  int rc = teensyFlushBuffer(p);
   
   if (rc != SQLITE_OK)
   {
     return rc;
   }
   
-  p->fd->flush();
+  p->teensyFile->flush();
 
   return SQLITE_OK;
 }
@@ -402,22 +405,22 @@ static int demoSync(sqlite3_file *pFile, int flags)
 /*
 ** Write the size of the file in bytes to *pSize.
 */
-static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize)
+static int teensyFileSize(sqlite3_file *pFile, sqlite_int64 *pSize)
 {
-  DemoFile *p = (DemoFile*)pFile;
+  TeensyVFSFile *p = (TeensyVFSFile*)pFile;
   /* Flush the contents of the buffer to disk. As with the flush in the
-  ** demoRead() method, it would be possible to avoid this and save a write
+  ** teensyRead() method, it would be possible to avoid this and save a write
   ** here and there. But in practice this comes up so infrequently it is
   ** not worth the trouble.
   */
-  int rc = demoFlushBuffer(p);
+  int rc = teensyFlushBuffer(p);
 
   if (rc != SQLITE_OK)
   {
     return rc;
   }
   
-  *pSize = p->fd->size();
+  *pSize = p->teensyFile->size();
 
   return SQLITE_OK;
 }
@@ -428,15 +431,15 @@ static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize)
 ** a reserved lock on the database file. This ensures that if a hot-journal
 ** file is found in the file-system it is rolled back.
 */
-static int demoLock(sqlite3_file *pFile, int eLock)
+static int teensyLock(sqlite3_file *pFile, int eLock)
 {
   return SQLITE_OK;
 }
-static int demoUnlock(sqlite3_file *pFile, int eLock)
+static int teensyUnlock(sqlite3_file *pFile, int eLock)
 {
   return SQLITE_OK;
 }
-static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut)
+static int teensyCheckReservedLock(sqlite3_file *pFile, int *pResOut)
 {
   *pResOut = 0;
   return SQLITE_OK;
@@ -445,7 +448,7 @@ static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut)
 /*
 ** No xFileControl() verbs are implemented by this VFS.
 */
-static int demoFileControl(sqlite3_file *pFile, int op, void *pArg)
+static int teensyFileControl(sqlite3_file *pFile, int op, void *pArg)
 {
   return SQLITE_NOTFOUND;
 }
@@ -455,12 +458,12 @@ static int demoFileControl(sqlite3_file *pFile, int op, void *pArg)
 ** may return special values allowing SQLite to optimize file-system 
 ** access to some extent. But it is also safe to simply return 0.
 */
-static int demoSectorSize(sqlite3_file *pFile)
+static int teensySectorSize(sqlite3_file *pFile)
 {
   return T41SQLite::getInstance().getSectorSize();
 }
 
-static int demoDeviceCharacteristics(sqlite3_file *pFile)
+static int teensyDeviceCharacteristics(sqlite3_file *pFile)
 {
   return T41SQLite::getInstance().getDeviceCharacteristics();
 }
@@ -468,32 +471,32 @@ static int demoDeviceCharacteristics(sqlite3_file *pFile)
 /*
 ** Open a file handle.
 */
-static int demoOpen(
+static int teensyOpen(
   sqlite3_vfs *pVfs,              /* VFS */
   const char *zName,              /* File to open, or 0 for a temp file */
-  sqlite3_file *pFile,            /* Pointer to DemoFile struct to populate */
+  sqlite3_file *pFile,            /* Pointer to TeensyVFSFile struct to populate */
   int flags,                      /* Input SQLITE_OPEN_XXX flags */
   int *pOutFlags                  /* Output SQLITE_OPEN_XXX flags (or NULL) */
 ){
-  static const sqlite3_io_methods demoio = {
+  static const sqlite3_io_methods teensyio = {
     1,                            /* iVersion */
-    demoClose,                    /* xClose */
-    demoRead,                     /* xRead */
-    demoWrite,                    /* xWrite */
-    demoTruncate,                 /* xTruncate */
-    demoSync,                     /* xSync */
-    demoFileSize,                 /* xFileSize */
-    demoLock,                     /* xLock */
-    demoUnlock,                   /* xUnlock */
-    demoCheckReservedLock,        /* xCheckReservedLock */
-    demoFileControl,              /* xFileControl */
-    demoSectorSize,               /* xSectorSize */
-    demoDeviceCharacteristics     /* xDeviceCharacteristics */
+    teensyClose,                    /* xClose */
+    teensyRead,                     /* xRead */
+    teensyWrite,                    /* xWrite */
+    teensyTruncate,                 /* xTruncate */
+    teensySync,                     /* xSync */
+    teensyFileSize,                 /* xFileSize */
+    teensyLock,                     /* xLock */
+    teensyUnlock,                   /* xUnlock */
+    teensyCheckReservedLock,        /* xCheckReservedLock */
+    teensyFileControl,              /* xFileControl */
+    teensySectorSize,               /* xSectorSize */
+    teensyDeviceCharacteristics     /* xDeviceCharacteristics */
   };
 
   Serial.println("VFS_DEBUG_OPEN");
 
-  DemoFile* p = (DemoFile*)pFile; /* Populate this structure */
+  TeensyVFSFile* p = (TeensyVFSFile*)pFile; /* Populate this structure */
   char* aBuf = 0;
 
   if (zName == 0)
@@ -506,7 +509,7 @@ static int demoOpen(
 
   if (flags & SQLITE_OPEN_MAIN_JOURNAL)
   {
-    aBuf = (char*)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
+    aBuf = (char*)sqlite3_malloc(SQLITE_VFS_JOURNAL_BUFFERSZ);
     
     if (not aBuf)
     {
@@ -515,10 +518,10 @@ static int demoOpen(
   }
   
   uint8_t openMode = (flags & SQLITE_OPEN_READONLY) ? FILE_READ : FILE_WRITE;
-  memset(p, 0, sizeof(DemoFile));
-  p->fd = new FileVFS(T41SQLite::getInstance().getFilesystem()->open(zName, openMode));
+  memset(p, 0, sizeof(TeensyVFSFile));
+  p->teensyFile = new TeensyFile(T41SQLite::getInstance().getFilesystem()->open(zName, openMode));
   
-  if (not p->fd) // check if file is open
+  if (not p->teensyFile) // check if file is open
   {
     sqlite3_free(aBuf);
     return SQLITE_CANTOPEN;
@@ -531,7 +534,7 @@ static int demoOpen(
     *pOutFlags = flags;
   }
 
-  p->base.pMethods = &demoio;
+  p->sqliteFile.pMethods = &teensyio;
 
   return SQLITE_OK;
 }
@@ -542,7 +545,7 @@ static int demoOpen(
 ** file has been synced to disk before returning.
 ** BUT CANNOT ensure the sync, therefore we ignore the dirSync parameter.
 */
-static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
+static int teensyDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
 {
   Serial.print("VFS_DEBUG_DELETE_PATH ");
   Serial.println(zPath);
@@ -559,7 +562,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
 ** Query the file-system to see if the named file exists, is readable or
 ** is both readable and writable.
 */
-static int demoAccess(
+static int teensyAccess(
   sqlite3_vfs *pVfs, 
   const char *zPath, 
   int flags, 
@@ -597,7 +600,7 @@ static int demoAccess(
 */
 // !!!! It impossible to get the full pathname with exFAT. !!!!
 // !!!! Therefore we copy zPath with (set by user) getDBDirFullPath() into zPathOut. !!!!
-static int demoFullPathname(
+static int teensyFullPathname(
   sqlite3_vfs *pVfs,              /* VFS */
   const char *zPath,              /* Input path (possibly a relative path) */
   int nPathOut,                   /* Size of output buffer in bytes */
@@ -626,23 +629,23 @@ static int demoFullPathname(
 ** extensions compiled as shared objects. This simple VFS does not support
 ** this functionality, so the following functions are no-ops.
 */
-static void* demoDlOpen(sqlite3_vfs* pVfs, const char* zPath)
+static void* teensyDlOpen(sqlite3_vfs* pVfs, const char* zPath)
 {
   return nullptr;
 }
 
-static void demoDlError(sqlite3_vfs* pVfs, int nByte, char* zErrMsg)
+static void teensyDlError(sqlite3_vfs* pVfs, int nByte, char* zErrMsg)
 {
   sqlite3_snprintf(nByte, zErrMsg, "Loadable extensions are not supported");
   zErrMsg[nByte-1] = '\0';
 }
 
-static void (*demoDlSym(sqlite3_vfs* pVfs, void* pH, const char* z))(void)
+static void (*teensyDlSym(sqlite3_vfs* pVfs, void* pH, const char* z))(void)
 {
   return 0;
 }
 
-static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle)
+static void teensyDlClose(sqlite3_vfs *pVfs, void *pHandle)
 {
   return;
 }
@@ -651,7 +654,7 @@ static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle)
 ** Parameter zByte points to a buffer nByte bytes in size. Populate this
 ** buffer with pseudo-random data.
 */
-static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte)
+static int teensyRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte)
 {
   return SQLITE_OK;
 }
@@ -660,7 +663,7 @@ static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte)
 ** Sleep for at least nMicro microseconds. Return the (approximate) number 
 ** of microseconds slept for.
 */
-static int demoSleep(sqlite3_vfs *pVfs, int nMicro)
+static int teensySleep(sqlite3_vfs *pVfs, int nMicro)
 {
   elapsedMicros elapsedMicroseconds;
   delayMicroseconds(nMicro);
@@ -678,7 +681,7 @@ static int demoSleep(sqlite3_vfs *pVfs, int nMicro)
 ** value, it will stop working some time in the year 2038 AD (the so-called
 ** "year 2038" problem that afflicts systems that store time this way). 
 */
-static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime)
+static int teensyCurrentTime(sqlite3_vfs *pVfs, double *pTime)
 {
   time_t t = now();
   *pTime = t/86400.0 + 2440587.5; 
@@ -689,31 +692,31 @@ static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime)
 ** This function returns a pointer to the VFS implemented in this file.
 ** To make the VFS available to SQLite:
 **
-**   sqlite3_vfs_register(sqlite3_demovfs(), 0);
+**   sqlite3_vfs_register(sqlite3_teensy_vfs(), 0);
 */
-sqlite3_vfs *sqlite3_demovfs(void)
+sqlite3_vfs* sqlite3_teensy_vfs(void)
 {
-  static sqlite3_vfs demovfs = {
+  static sqlite3_vfs teensyvfs = {
     1,                            /* iVersion */
-    sizeof(DemoFile),             /* szOsFile */
+    sizeof(TeensyVFSFile),             /* szOsFile */
     MAXPATHNAME,                  /* mxPathname */
     0,                            /* pNext */
-    FS_VFS_NAME,                  /* zName */
+    TEENSY_VFS_NAME,              /* zName */
     0,                            /* pAppData */
-    demoOpen,                     /* xOpen */
-    demoDelete,                   /* xDelete */
-    demoAccess,                   /* xAccess */
-    demoFullPathname,             /* xFullPathname */
-    demoDlOpen,                   /* xDlOpen */
-    demoDlError,                  /* xDlError */
-    demoDlSym,                    /* xDlSym */
-    demoDlClose,                  /* xDlClose */
-    demoRandomness,               /* xRandomness */
-    demoSleep,                    /* xSleep */
-    demoCurrentTime,              /* xCurrentTime */
+    teensyOpen,                     /* xOpen */
+    teensyDelete,                   /* xDelete */
+    teensyAccess,                   /* xAccess */
+    teensyFullPathname,             /* xFullPathname */
+    teensyDlOpen,                   /* xDlOpen */
+    teensyDlError,                  /* xDlError */
+    teensyDlSym,                    /* xDlSym */
+    teensyDlClose,                  /* xDlClose */
+    teensyRandomness,               /* xRandomness */
+    teensySleep,                    /* xSleep */
+    teensyCurrentTime,              /* xCurrentTime */
   };
-  
-  return &demovfs;
+
+  return &teensyvfs;
 }
 
 void errorLogCallback(void *pArg, int iErrCode, const char *zMsg)
@@ -727,7 +730,7 @@ int sqlite3_os_init(void)
   
   returnCode = sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, NULL);
   if (returnCode != SQLITE_OK) { return returnCode; }
-  returnCode = sqlite3_vfs_register(sqlite3_demovfs(), 1);
+  returnCode = sqlite3_vfs_register(sqlite3_teensy_vfs(), T41SQLite::IS_DEFAULT_VFS);
   if (returnCode != SQLITE_OK) { return returnCode; }
 
   return SQLITE_OK;
