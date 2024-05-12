@@ -41,11 +41,6 @@
 **
 **          -DSQLITE_TEMP_STORE=3
 **
-**     4. File truncation. As of version 3.6.24, SQLite may run without
-**        a working xTruncate() call, providing the user does not configure
-**        SQLite to use "journal_mode=truncate", or use both
-**        "journal_mode=persist" and ATTACHed databases.
-**
 **   It is assumed that the system uses UNIX-like path-names. Specifically,
 **   that '/' characters are used to separate path components and that
 **   a path-name is a relative path unless it begins with a '/'. And that
@@ -163,8 +158,6 @@ static int demoDirectWrite(
   int iAmt,                       /* Size of data to write in bytes */
   sqlite_int64 iOfst              /* File offset to write to */
 ){
-  size_t nWrite;                  /* Return value from write() */
-  
   Serial.println("VFS_DEBUG_DIRECT_WRITE");
 
   if (iAmt < 0) // is a size type, must not be less than zero
@@ -177,9 +170,10 @@ static int demoDirectWrite(
     return SQLITE_IOERR_WRITE;
   }
 
-  nWrite = p->fd->write(zBuf, iAmt);
+  size_t toWrite = static_cast<size_t>(iAmt);
+  size_t nWrite = p->fd->write(zBuf, toWrite);
 
-  if (nWrite != static_cast<size_t>(iAmt))
+  if (nWrite != toWrite)
   {
     return SQLITE_IOERR_WRITE;
   }
@@ -199,24 +193,30 @@ static int demoDirectWrite(
 */
 static int demoFlushBuffer(DemoFile *p)
 {
-  int rc = SQLITE_OK;
   Serial.print("VFS_DEBUG_FLUSH_BUFFER ");
   Serial.println(p->nBuffer);
+
   if (p->nBuffer)
   {
-    rc = demoDirectWrite(p, p->aBuffer, p->nBuffer, p->iBufferOfst);
+    int rc = demoDirectWrite(p, p->aBuffer, p->nBuffer, p->iBufferOfst);
     p->nBuffer = 0;
+
+    if (rc != SQLITE_OK)
+    {
+      return rc;
+    }
   }
-  return rc;
+
+  return SQLITE_OK;
 }
 
 /*
 ** Close a file.
 */
-static int demoClose(sqlite3_file *pFile){
-  int rc;
+static int demoClose(sqlite3_file *pFile)
+{
   DemoFile *p = (DemoFile*)pFile;
-  rc = demoFlushBuffer(p);
+  int rc = demoFlushBuffer(p);
   sqlite3_free(p->aBuffer);
 
   Serial.println("VFS_DEBUG_CLOSE");
@@ -245,8 +245,6 @@ static int demoRead(
   Serial.println(iOfst);
 
   DemoFile *p = (DemoFile*)pFile;
-  int nRead;                      /* Return value from read() */
-  int rc;                         /* Return code from demoFlushBuffer() */
 
   /* Flush any data in the write buffer to disk in case this operation
   ** is trying to read data the file-region currently cached in the buffer.
@@ -254,7 +252,7 @@ static int demoRead(
   ** unnecessary write here, but in practice SQLite will rarely read from
   ** a journal file when there is data cached in the write-buffer.
   */
-  rc = demoFlushBuffer(p);
+  int rc = demoFlushBuffer(p);
 
   if (rc != SQLITE_OK)
   {
@@ -276,11 +274,12 @@ static int demoRead(
   Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
   Serial.println(p->fd->position());
 
-  nRead = p->fd->read(zBuf, iAmt);
+  size_t toRead = static_cast<size_t>(iAmt);
+  size_t nRead = p->fd->read(zBuf, toRead);
   Serial.print("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
   Serial.println(nRead);
 
-  if (nRead == iAmt)
+  if (nRead == toRead)
   {
     Serial.println("VFS_DEBUG_READ - END (OK)");
 
@@ -288,9 +287,9 @@ static int demoRead(
   }
   else if (nRead >= 0)
   {
-    if (nRead < iAmt)
+    if (nRead < toRead)
     {
-      memset(&((char*)zBuf)[nRead], 0, iAmt - nRead);
+      memset(&((char*)zBuf)[nRead], 0, toRead - nRead);
     }
 
     Serial.println("VFS_DEBUG_READ - END (SQLITE_IOERR_SHORT_READ)");
@@ -365,25 +364,30 @@ static int demoWrite(
   return SQLITE_OK;
 }
 
-/*
-** Truncate a file. This is a no-op for this VFS (see header comments at
-** the top of the file).
+/* (From SQLite documentation:)
+** The xTruncate method truncates a file to be nByte bytes in length. If the file is already nByte bytes or less in length then this method is a no-op.
+** The xTruncate method returns SQLITE_OK on success and SQLITE_IOERR_TRUNCATE if anything goes wrong. 
 */
-static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size){
-#if 0
-  if( ftruncate(((DemoFile *)pFile)->fd, size) ) return SQLITE_IOERR_TRUNCATE;
-#endif
+static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size)
+{
+  DemoFile* p = (DemoFile*)pFile;
+  size_t reducedSize = static_cast<size_t>(size);
+
+  if (p->fd->size() > reducedSize)
+  {
+    return p->fd->truncate(reducedSize) ? SQLITE_OK : SQLITE_IOERR_TRUNCATE;
+  }
+
   return SQLITE_OK;
 }
 
 /*
 ** Sync the contents of the file to the persistent media.
 */
-static int demoSync(sqlite3_file *pFile, int flags){
-  DemoFile *p = (DemoFile*)pFile;
-  int rc;
-
-  rc = demoFlushBuffer(p);
+static int demoSync(sqlite3_file *pFile, int flags)
+{
+  DemoFile* p = (DemoFile*)pFile;
+  int rc = demoFlushBuffer(p);
   
   if (rc != SQLITE_OK)
   {
@@ -398,16 +402,15 @@ static int demoSync(sqlite3_file *pFile, int flags){
 /*
 ** Write the size of the file in bytes to *pSize.
 */
-static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize)
+{
   DemoFile *p = (DemoFile*)pFile;
-  int rc;                         /* Return code from demoFlushBuffer() call */
-
   /* Flush the contents of the buffer to disk. As with the flush in the
   ** demoRead() method, it would be possible to avoid this and save a write
   ** here and there. But in practice this comes up so infrequently it is
   ** not worth the trouble.
   */
-  rc = demoFlushBuffer(p);
+  int rc = demoFlushBuffer(p);
 
   if (rc != SQLITE_OK)
   {
@@ -425,13 +428,16 @@ static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 ** a reserved lock on the database file. This ensures that if a hot-journal
 ** file is found in the file-system it is rolled back.
 */
-static int demoLock(sqlite3_file *pFile, int eLock){
+static int demoLock(sqlite3_file *pFile, int eLock)
+{
   return SQLITE_OK;
 }
-static int demoUnlock(sqlite3_file *pFile, int eLock){
+static int demoUnlock(sqlite3_file *pFile, int eLock)
+{
   return SQLITE_OK;
 }
-static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut)
+{
   *pResOut = 0;
   return SQLITE_OK;
 }
@@ -439,7 +445,8 @@ static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 /*
 ** No xFileControl() verbs are implemented by this VFS.
 */
-static int demoFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int demoFileControl(sqlite3_file *pFile, int op, void *pArg)
+{
   return SQLITE_NOTFOUND;
 }
 
@@ -499,7 +506,7 @@ static int demoOpen(
 
   if (flags & SQLITE_OPEN_MAIN_JOURNAL)
   {
-    aBuf = (char *)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
+    aBuf = (char*)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
     
     if (not aBuf)
     {
@@ -589,7 +596,7 @@ static int demoAccess(
 **   2. Full paths begin with a '/' character.
 */
 // !!!! It impossible to get the full pathname with exFAT. !!!!
-// !!!! Therefore we only copy zPath into zPathOut. !!!!
+// !!!! Therefore we copy zPath with (set by user) getDBDirFullPath() into zPathOut. !!!!
 static int demoFullPathname(
   sqlite3_vfs *pVfs,              /* VFS */
   const char *zPath,              /* Input path (possibly a relative path) */
@@ -619,17 +626,24 @@ static int demoFullPathname(
 ** extensions compiled as shared objects. This simple VFS does not support
 ** this functionality, so the following functions are no-ops.
 */
-static void *demoDlOpen(sqlite3_vfs *pVfs, const char *zPath){
-  return 0;
+static void* demoDlOpen(sqlite3_vfs* pVfs, const char* zPath)
+{
+  return nullptr;
 }
-static void demoDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
+
+static void demoDlError(sqlite3_vfs* pVfs, int nByte, char* zErrMsg)
+{
   sqlite3_snprintf(nByte, zErrMsg, "Loadable extensions are not supported");
   zErrMsg[nByte-1] = '\0';
 }
-static void (*demoDlSym(sqlite3_vfs *pVfs, void *pH, const char *z))(void){
+
+static void (*demoDlSym(sqlite3_vfs* pVfs, void* pH, const char* z))(void)
+{
   return 0;
 }
-static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle){
+
+static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle)
+{
   return;
 }
 
@@ -637,7 +651,8 @@ static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Parameter zByte points to a buffer nByte bytes in size. Populate this
 ** buffer with pseudo-random data.
 */
-static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte){
+static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte)
+{
   return SQLITE_OK;
 }
 
@@ -645,7 +660,8 @@ static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte){
 ** Sleep for at least nMicro microseconds. Return the (approximate) number 
 ** of microseconds slept for.
 */
-static int demoSleep(sqlite3_vfs *pVfs, int nMicro){
+static int demoSleep(sqlite3_vfs *pVfs, int nMicro)
+{
   elapsedMicros elapsedMicroseconds;
   delayMicroseconds(nMicro);
   return elapsedMicroseconds;
@@ -662,7 +678,8 @@ static int demoSleep(sqlite3_vfs *pVfs, int nMicro){
 ** value, it will stop working some time in the year 2038 AD (the so-called
 ** "year 2038" problem that afflicts systems that store time this way). 
 */
-static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime){
+static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime)
+{
   time_t t = now();
   *pTime = t/86400.0 + 2440587.5; 
   return SQLITE_OK;
@@ -674,7 +691,8 @@ static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime){
 **
 **   sqlite3_vfs_register(sqlite3_demovfs(), 0);
 */
-sqlite3_vfs *sqlite3_demovfs(void){
+sqlite3_vfs *sqlite3_demovfs(void)
+{
   static sqlite3_vfs demovfs = {
     1,                            /* iVersion */
     sizeof(DemoFile),             /* szOsFile */
@@ -694,6 +712,7 @@ sqlite3_vfs *sqlite3_demovfs(void){
     demoSleep,                    /* xSleep */
     demoCurrentTime,              /* xCurrentTime */
   };
+  
   return &demovfs;
 }
 

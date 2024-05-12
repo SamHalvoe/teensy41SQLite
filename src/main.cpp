@@ -4,6 +4,9 @@
 
 #include <SD.h>
 
+const char* dbName = "test.db";
+const char* dbJournalName = "test.db-journal";
+
 void setupSerial(size_t in_serialBaudrate)
 {
   Serial.begin(in_serialBaudrate);
@@ -18,7 +21,7 @@ void setupSerial(size_t in_serialBaudrate)
   }
 }
 
-void delaySetup(uint8_t in_seconds = 15)
+void delaySetup(uint8_t in_seconds)
 {
   Serial.print("Delay setup by ");
   Serial.print(in_seconds);
@@ -104,7 +107,7 @@ void testSQLite()
 void setup()
 {
   setupSerial(115200);
-  delaySetup(10);
+  delaySetup(3);
 
   if (not SD.begin(BUILTIN_SDCARD))
   {
@@ -112,13 +115,13 @@ void setup()
     while (true) { delay(1000); }
   }
 
+  if (SD.exists(dbName)) { if (not SD.remove(dbName)) { Serial.printf("Remove %s failed!", dbName); } }
+  if (SD.exists(dbJournalName)) { if (not SD.remove(dbJournalName)) { Serial.printf("Remove %s failed!", dbJournalName); } }
+
   int rc = T41SQLite::getInstance().begin(&SD);
 
   if (rc == SQLITE_OK)
   {
-    if (not SD.remove("test.db")) { Serial.println("remove test.db failed"); }
-    if (not SD.remove("test.db-journal")) { Serial.println("remove test.db-journal failed"); }
-
     testSQLite();
   }
   else
