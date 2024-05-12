@@ -11,7 +11,7 @@ int T41SQLite::end()
   return sqlite3_shutdown();
 }
 
-void T41SQLite::setFilesystem(FS *io_filesystem)
+void T41SQLite::setFilesystem(FS* io_filesystem)
 {
   m_filesystem = io_filesystem;
 }
@@ -29,6 +29,11 @@ void T41SQLite::setDBDirFullPath(const String &in_dbDirFullpath)
 const String &T41SQLite::getDBDirFullPath() const
 {
   return m_dbDirFullpath;
+}
+
+int T41SQLite::setLogCallback(LogCallback in_callback, void* in_forUseInCallback)
+{
+  return sqlite3_config(SQLITE_CONFIG_LOG, in_callback, in_forUseInCallback);
 }
 
 void T41SQLite::resetSectorSize()

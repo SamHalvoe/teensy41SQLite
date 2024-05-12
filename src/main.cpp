@@ -41,6 +41,11 @@ void delaySetup(uint8_t in_seconds)
   Serial.println(" Continue setup!");
 }
 
+void errorLogCallback(void *pArg, int iErrCode, const char *zMsg)
+{
+  Serial.printf("(%d) %s\n", iErrCode, zMsg);
+}
+
 void checkSQLiteError(sqlite3* in_db, int in_rc)
 {
   if (in_rc == SQLITE_OK)
@@ -118,6 +123,7 @@ void setup()
   if (SD.exists(dbName)) { if (not SD.remove(dbName)) { Serial.printf("Remove %s failed!", dbName); } }
   if (SD.exists(dbJournalName)) { if (not SD.remove(dbJournalName)) { Serial.printf("Remove %s failed!", dbJournalName); } }
 
+  T41SQLite::getInstance().setLogCallback(errorLogCallback);
   int rc = T41SQLite::getInstance().begin(&SD);
 
   if (rc == SQLITE_OK)

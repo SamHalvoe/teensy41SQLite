@@ -719,26 +719,13 @@ sqlite3_vfs* sqlite3_teensy_vfs(void)
   return &teensyvfs;
 }
 
-void errorLogCallback(void *pArg, int iErrCode, const char *zMsg)
-{
-  Serial.printf("(%d) %s\n", iErrCode, zMsg);
-}
-
 int sqlite3_os_init(void)
 {
-  int returnCode = SQLITE_OK;
-  
-  returnCode = sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, NULL);
-  if (returnCode != SQLITE_OK) { return returnCode; }
-  returnCode = sqlite3_vfs_register(sqlite3_teensy_vfs(), T41SQLite::IS_DEFAULT_VFS);
-  if (returnCode != SQLITE_OK) { return returnCode; }
-
-  return SQLITE_OK;
+  return sqlite3_vfs_register(sqlite3_teensy_vfs(), T41SQLite::IS_DEFAULT_VFS);
 }
 
 int sqlite3_os_end(void)
 {
   // undo what sqlite3_os_init did (e.g. free resources)
-
   return SQLITE_OK;
 }

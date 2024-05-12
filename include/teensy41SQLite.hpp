@@ -8,6 +8,9 @@
 class T41SQLite
 {
   public:
+    using LogCallback = void (*)(void* pArg, int iErrCode, const char* zMsg);
+
+  public:
     static const int IS_DEFAULT_VFS = 1;
     static const int ACCESS_FAILED = 0;
     static const int ACCESS_SUCCESFUL = 1;
@@ -41,6 +44,8 @@ class T41SQLite
     
     void setDBDirFullPath(const String& in_dbDirFullpath);
     const String& getDBDirFullPath() const;
+
+    int setLogCallback(LogCallback in_callback, void* in_forUseInCallback = nullptr);
 
     void resetSectorSize();
     void setSectorSize(int in_size);
