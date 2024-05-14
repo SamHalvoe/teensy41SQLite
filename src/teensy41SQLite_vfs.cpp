@@ -108,11 +108,7 @@
 **   operations.
 */
 
-// ---- remaining sqlite teensyvfs includes ----
-
 #include <assert.h>
-
-// ---- arduino teensy 4.1 vfs includes ----
 
 #include "teensy41SQLite.hpp"
 
@@ -161,7 +157,7 @@ static int teensyDirectWrite(
   int iAmt,                       /* Size of data to write in bytes */
   sqlite_int64 iOfst              /* File offset to write to */
 ){
-  Serial.println("VFS_DEBUG_DIRECT_WRITE");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_DIRECT_WRITE");
 
   if (iAmt < 0) // is a size type, must not be less than zero
   {
@@ -183,8 +179,8 @@ static int teensyDirectWrite(
 
   p->teensyFile->flush();
 
-  Serial.print("VFS_DEBUG_DIRECT_WRITE_SIZE: ");
-  Serial.println(p->teensyFile->size());
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_DIRECT_WRITE_SIZE: ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->teensyFile->size());
 
   return SQLITE_OK;
 }
@@ -196,8 +192,8 @@ static int teensyDirectWrite(
 */
 static int teensyFlushBuffer(TeensyVFSFile *p)
 {
-  Serial.print("VFS_DEBUG_FLUSH_BUFFER ");
-  Serial.println(p->nBuffer);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_FLUSH_BUFFER ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->nBuffer);
 
   if (p->nBuffer)
   {
@@ -222,9 +218,9 @@ static int teensyClose(sqlite3_file *pFile)
   int rc = teensyFlushBuffer(p);
   sqlite3_free(p->aBuffer);
 
-  Serial.println("VFS_DEBUG_CLOSE");
-  Serial.print("VFS_DEBUG_CLOSE_FILE ");
-  Serial.println(p->teensyFile->name());
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_CLOSE");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_CLOSE_FILE ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->teensyFile->name());
 
   p->teensyFile->close();
 
@@ -241,11 +237,11 @@ static int teensyRead(
   sqlite_int64 iOfst
 )
 {
-  Serial.println("VFS_DEBUG_READ - BEGIN");
-  Serial.print("VFS_DEBUG_READ_iAMT ");
-  Serial.println(iAmt);
-  Serial.print("VFS_DEBUG_READ_OFFSET ");
-  Serial.println(iOfst);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_READ - BEGIN");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_iAMT ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(iAmt);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_OFFSET ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(iOfst);
 
   TeensyVFSFile *p = (TeensyVFSFile*)pFile;
 
@@ -262,29 +258,29 @@ static int teensyRead(
     return rc;
   }
   
-  Serial.print("VFS_DEBUG_READ_FILE_SIZE ");
-  Serial.println(p->teensyFile->size());
-  Serial.print("VFS_DEBUG_READ_CUR ");
-  Serial.println(p->teensyFile->position());
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_FILE_SIZE ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->teensyFile->size());
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_CUR ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->teensyFile->position());
 
   uint64_t seekPosition = min(static_cast<uint64_t>(iOfst), p->teensyFile->size());
   if (not p->teensyFile->seek(seekPosition, SeekSet))
   {
-    Serial.println("VFS_DEBUG_READ_SEEK_FAIL");
+    TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_READ_SEEK_FAIL");
     return SQLITE_IOERR_READ;
   }
 
-  Serial.print("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
-  Serial.println(p->teensyFile->position());
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_CUR_AFTER_SEEK ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(p->teensyFile->position());
 
   size_t toRead = static_cast<size_t>(iAmt);
   size_t nRead = p->teensyFile->read(zBuf, toRead);
-  Serial.print("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
-  Serial.println(nRead);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_READ_FILE_READ_RETURN_VALUE ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(nRead);
 
   if (nRead == toRead)
   {
-    Serial.println("VFS_DEBUG_READ - END (OK)");
+    TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_READ - END (OK)");
 
     return SQLITE_OK;
   }
@@ -295,12 +291,12 @@ static int teensyRead(
       memset(&((char*)zBuf)[nRead], 0, toRead - nRead);
     }
 
-    Serial.println("VFS_DEBUG_READ - END (SQLITE_IOERR_SHORT_READ)");
+    TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_READ - END (SQLITE_IOERR_SHORT_READ)");
 
     return SQLITE_IOERR_SHORT_READ; // ok
   }
   
-  Serial.println("VFS_DEBUG_READ - END (ERROR)");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_READ - END (ERROR)");
 
   return SQLITE_IOERR_READ; // nRead < 0 --> call to p->teensyFile->read(zBuf, iAmt) failed
 }
@@ -316,7 +312,7 @@ static int teensyWrite(
 ){
   TeensyVFSFile *p = (TeensyVFSFile*)pFile;
 
-  Serial.println("VFS_DEBUG_WRITE");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_WRITE");
   
   if (p->aBuffer)
   {
@@ -494,7 +490,7 @@ static int teensyOpen(
     teensyDeviceCharacteristics     /* xDeviceCharacteristics */
   };
 
-  Serial.println("VFS_DEBUG_OPEN");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN("VFS_DEBUG_OPEN");
 
   TeensyVFSFile* p = (TeensyVFSFile*)pFile; /* Populate this structure */
   char* aBuf = 0;
@@ -504,8 +500,8 @@ static int teensyOpen(
     return SQLITE_IOERR;
   }
 
-  Serial.print("VFS_DEBUG_OPEN_FILE ");
-  Serial.println(zName);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_OPEN_FILE ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(zName);
 
   if (flags & SQLITE_OPEN_MAIN_JOURNAL)
   {
@@ -547,8 +543,8 @@ static int teensyOpen(
 */
 static int teensyDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
 {
-  Serial.print("VFS_DEBUG_DELETE_PATH ");
-  Serial.println(zPath);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_DELETE_PATH ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(zPath);
 
   if (not T41SQLite::getInstance().getFilesystem()->remove(zPath))
   {
@@ -611,8 +607,8 @@ static int teensyFullPathname(
   sqlite3_snprintf(nPathOut, zPathOut, "%s", fullPath.c_str());
   zPathOut[nPathOut - 1] = '\0';
 
-  Serial.print("VFS_DEBUG_FULL_PATH ");
-  Serial.println(zPathOut);
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT("VFS_DEBUG_FULL_PATH ");
+  TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(zPathOut);
 
   return SQLITE_OK;
 }

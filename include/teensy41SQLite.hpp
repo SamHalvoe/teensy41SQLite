@@ -57,4 +57,14 @@ class T41SQLite
     int getDeviceCharacteristics() const;
 };
 
+//#define TEENSY_41_SQLITE_DEBUG
+
+#ifdef TEENSY_41_SQLITE_DEBUG
+  #define TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT(...) Serial.print(__VA_ARGS__)
+  #define TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(...) Serial.println(__VA_ARGS__)
+#else
+  #define TEENSY_41_SQLITE_DEBUG_SERIAL_PRINT(...)
+  #define TEENSY_41_SQLITE_DEBUG_SERIAL_PRINTLN(...)
+#endif // TEENSY_41_SQLITE_DEBUG
+
 #endif // TEENSY_41_SQLITE
