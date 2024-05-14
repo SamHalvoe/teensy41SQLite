@@ -7,12 +7,13 @@
 const char* dbName = "test.db";
 const char* dbJournalName = "test.db-journal";
 
-void setupSerial(size_t in_serialBaudrate)
+void setupSerial(long in_serialBaudrate, unsigned long in_timeoutInSeconds = 15)
 {
   Serial.begin(in_serialBaudrate);
 
+  unsigned long timeoutInMilliseconds = in_timeoutInSeconds * 1000;
   elapsedMillis initialisationTime;
-  while (not Serial && initialisationTime < 15000);
+  while (not Serial && initialisationTime < timeoutInMilliseconds);
 
   if (Serial)
   {
