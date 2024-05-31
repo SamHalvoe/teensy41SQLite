@@ -32,14 +32,12 @@ class T41SQLite
     static T41SQLite& getInstance()
     {
       static T41SQLite instance;
-
       return instance;
     }
 
     int begin(FS* io_filesystem);
     int end();
     
-    void setFilesystem(FS* io_filesystem);
     FS* getFilesystem();
     
     void setDBDirFullPath(const String& in_dbDirFullpath);

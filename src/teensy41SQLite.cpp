@@ -2,18 +2,15 @@
 
 int T41SQLite::begin(FS* io_filesystem)
 {
-  setFilesystem(io_filesystem);
+  m_filesystem = io_filesystem;
   return sqlite3_initialize();
 }
 
 int T41SQLite::end()
 {
-  return sqlite3_shutdown();
-}
-
-void T41SQLite::setFilesystem(FS* io_filesystem)
-{
-  m_filesystem = io_filesystem;
+  int result = sqlite3_shutdown();
+  m_filesystem = nullptr;
+  return result;
 }
 
 FS* T41SQLite::getFilesystem()

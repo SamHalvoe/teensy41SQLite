@@ -125,11 +125,25 @@ void setup()
   if (SD.exists(dbJournalName)) { if (not SD.remove(dbJournalName)) { Serial.printf("Remove %s failed!", dbJournalName); } }
 
   T41SQLite::getInstance().setLogCallback(errorLogCallback);
-  int rc = T41SQLite::getInstance().begin(&SD);
+  int resultBegin = T41SQLite::getInstance().begin(&SD);
 
-  if (rc == SQLITE_OK)
+  if (resultBegin == SQLITE_OK)
   {
+    Serial.println("T41SQLite::getInstance().begin() succeded!");
+
     testSQLite();
+
+    int resultEnd = T41SQLite::getInstance().end();
+
+    if (resultEnd == SQLITE_OK)
+    {
+      Serial.println("T41SQLite::getInstance().end() succeded!");
+    }
+    else
+    {
+      Serial.print("T41SQLite::getInstance().end() failed! result code: ");
+      Serial.println(resultEnd);
+    }
   }
   else
   {
