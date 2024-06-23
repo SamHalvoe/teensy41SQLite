@@ -1,6 +1,6 @@
 {
   "name": "teensy41SQLite",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "arduino teensy 4.1 sqlite vfs",
   "keywords": "teensy, sqlite",
   "repository":
