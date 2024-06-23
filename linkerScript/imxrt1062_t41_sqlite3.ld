@@ -34,15 +34,15 @@ SECTIONS
 		. = ALIGN(4);
 	} > FLASH
 
+	.text.progmem : {
+		*(.progmem*)
+		. = ALIGN(4);
+	} > FLASH
+
 	.sqliteFlash : {
 		*sqlite3*.o (.text .text* .rodata .rodata*)
 		*teensy41SQLite_vfs*.o (.text .text* .rodata .rodata*)
 		*teensy41SQLite*.o (.text .text* .rodata .rodata*)
-		. = ALIGN(4);
-	} > FLASH
-
-	.text.progmem : {
-		*(.progmem*)
 		. = ALIGN(4);
 	} > FLASH
 
