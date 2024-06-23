@@ -43,7 +43,7 @@
         "-D SQLITE_OMIT_LOAD_EXTENSION=1",
         "-D SQLITE_OMIT_UTF16=1",
         "-D SQLITE_OMIT_WAL=1",
-        "-I lib/sqlite3/include"
+        "-I include/sqlite3"
     ]
   }
 }
